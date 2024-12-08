@@ -1,22 +1,30 @@
-use glium::winit::{
-    application::ApplicationHandler,
-    event::WindowEvent,
-    event_loop::{ActiveEventLoop, EventLoop},
-    window::{Window, WindowId},
+use glium::{
+    backend::glutin::SimpleWindowBuilder,
+    glutin::surface::WindowSurface,
+    winit::{
+        application::ApplicationHandler,
+        event::WindowEvent,
+        event_loop::{ActiveEventLoop, EventLoop},
+        window::{Window, WindowId},
+    },
+    Display, Surface,
 };
 
 #[derive(Default)]
 struct App {
     window: Option<Window>,
+    display: Option<Display<WindowSurface>>,
 }
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        self.window = Some(
-            event_loop
-                .create_window(Window::default_attributes().with_title("CedarMS"))
-                .unwrap(),
-        );
+        let (window, display) = SimpleWindowBuilder::new()
+            .with_title("CedarMS")
+            .with_inner_size(2560, 1600)
+            .build(event_loop);
+
+        self.window = Some(window);
+        self.display = Some(display);
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
@@ -25,19 +33,11 @@ impl ApplicationHandler for App {
                 event_loop.exit();
             }
             WindowEvent::RedrawRequested => {
-                // Redraw the application.
-                //
-                // It's preferable for applications that do not render continuously to render in
-                // this event rather than in AboutToWait, since rendering in here allows
-                // the program to gracefully handle redraws requested by the OS.
+                let display = self.display.as_ref().unwrap();
+                let mut target = display.draw();
+                target.clear_color(0.0, 0.0, 1.0, 1.0);
+                target.finish().unwrap();
 
-                // Draw.
-
-                // Queue a RedrawRequested event.
-                //
-                // You only need to call this if you've determined that you need to redraw in
-                // applications which do not always need to. Applications that redraw continuously
-                // can render here instead.
                 self.window.as_ref().unwrap().request_redraw();
             }
             _ => (),
