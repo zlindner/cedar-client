@@ -112,7 +112,13 @@ impl ApplicationHandler for App {
 }
 
 fn main() {
-    let ui_nx = NxFile::open(Path::new("nx/UI.nx")).unwrap();
+    match NxFile::open(Path::new("nx/UI.nx")) {
+        Ok(file) => file,
+        Err(err) => {
+            println!("{}", err);
+            return;
+        }
+    };
 
     let event_loop = EventLoop::new().unwrap();
     let mut app = App::default();

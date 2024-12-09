@@ -3,23 +3,79 @@ use std::{fs::File, io, path::Path};
 use memmap2::Mmap;
 use thiserror::Error;
 
-const MAGIC_BYTES: [u8; 4] = [0x50, 0x4b, 0x47, 0x34];
-
 #[derive(Error, Debug)]
 pub enum NxError {
     #[error("failed to load nx file")]
     Io(#[from] io::Error),
 
-    #[error("the file header is invalid")]
-    InvalidHeader,
-
     #[error("the header's magic bytes are invalid")]
     InvalidMagicBytes,
+
+    #[error("{0}..{1} is out of bounds")]
+    OutOfBoundsAccess(usize, usize),
+
+    #[error("invalid cast")]
+    InvalidCast(#[from] core::array::TryFromSliceError),
+}
+
+trait NxTryGet {
+    fn try_get_u16(&self, index: u64) -> Result<u16, NxError>;
+
+    fn try_get_u32(&self, index: u64) -> Result<u32, NxError>;
+
+    fn try_get_u64(&self, index: u64) -> Result<u64, NxError>;
+}
+
+impl NxTryGet for Mmap {
+    fn try_get_u16(&self, index: u64) -> Result<u16, NxError> {
+        let usize_index = index as usize;
+        let offset = size_of::<u16>();
+
+        let bytes =
+            self.get(usize_index..usize_index + offset)
+                .ok_or(NxError::OutOfBoundsAccess(
+                    usize_index,
+                    usize_index + offset,
+                ))?;
+
+        Ok(u16::from_le_bytes(bytes.try_into()?))
+    }
+
+    fn try_get_u32(&self, index: u64) -> Result<u32, NxError> {
+        let usize_index = index as usize;
+        let offset = size_of::<u32>();
+
+        let bytes =
+            self.get(usize_index..usize_index + offset)
+                .ok_or(NxError::OutOfBoundsAccess(
+                    usize_index,
+                    usize_index + offset,
+                ))?;
+
+        Ok(u32::from_le_bytes(bytes.try_into()?))
+    }
+
+    fn try_get_u64(&self, index: u64) -> Result<u64, NxError> {
+        let usize_index = index as usize;
+        let offset = size_of::<u64>();
+
+        let bytes =
+            self.get(usize_index..usize_index + offset)
+                .ok_or(NxError::OutOfBoundsAccess(
+                    usize_index,
+                    usize_index + offset,
+                ))?;
+
+        Ok(u64::from_le_bytes(bytes.try_into()?))
+    }
 }
 
 pub struct NxFile {
-    mmap: Mmap,
-    header: NxFileHeader,
+    data: Mmap,
+    header: NxHeader,
+    string_table: u64,
+    audio_table: u64,
+    bitmap_table: u64,
 }
 
 impl NxFile {
@@ -27,30 +83,31 @@ impl NxFile {
         let file = File::open(path)?;
 
         // Safety: TODO
-        let mmap = unsafe { Mmap::map(&file)? };
+        let data = unsafe { Mmap::map(&file)? };
 
-        let header = NxFileHeader::new(&mmap)?;
+        let header = NxHeader::new(&data)?;
         println!("{:?}", header);
 
-        let node_table = mmap.get(header.node_offset as usize..).unwrap();
-        // let string_table = mmap.get(header.string_offset as usize..8).unwrap();
+        // TODO try_get_node
+        let node_table = data.get(header.node_offset as usize..).unwrap();
 
-        let name = u32::from_le_bytes(node_table.get(0..4).unwrap().try_into().unwrap());
-        let children = u32::from_le_bytes(node_table.get(4..8).unwrap().try_into().unwrap());
-        let count = u16::from_le_bytes(node_table.get(8..10).unwrap().try_into().unwrap());
-        let data_type = u16::from_le_bytes(node_table.get(10..12).unwrap().try_into().unwrap());
-        let data = u64::from_le_bytes(node_table.get(12..20).unwrap().try_into().unwrap());
+        // TODO: *_table_offset?
+        let string_table = data.try_get_u64(header.string_offset)?;
+        let audio_table = data.try_get_u64(header.audio_offset)?;
+        let bitmap_table = data.try_get_u64(header.bitmap_offset)?;
 
-        println!("data type: {}", data_type);
-
-        Ok(Self { mmap, header })
+        Ok(Self {
+            data,
+            header,
+            string_table,
+            audio_table,
+            bitmap_table,
+        })
     }
-
-    pub fn get(&self, path: &str) {}
 }
 
 #[derive(Debug)]
-pub struct NxFileHeader {
+pub struct NxHeader {
     node_count: u32,
     node_offset: u64,
     string_count: u32,
@@ -61,63 +118,25 @@ pub struct NxFileHeader {
     audio_offset: u64,
 }
 
-#[derive(Debug)]
-#[repr(packed)]
-pub struct Header {
-    pub magic: u32,
-    pub nodecount: u32,
-    pub nodeoffset: u64,
-    pub stringcount: u32,
-    pub stringoffset: u64,
-    pub bitmapcount: u32,
-    pub bitmapoffset: u64,
-    pub audiocount: u32,
-    pub audiooffset: u64,
-}
-
-impl NxFileHeader {
-    pub fn new(data: &[u8]) -> Result<Self, NxError> {
+impl NxHeader {
+    pub fn new(data: &Mmap) -> Result<Self, NxError> {
         // Validate the header's "magic" bytes.
-        let magic_bytes: &[u8] = data.get(0..4).ok_or(NxError::InvalidHeader)?;
+        let magic_bytes = data.try_get_u32(0)?;
 
-        if magic_bytes != MAGIC_BYTES {
+        if magic_bytes != 0x34474B50 {
             return Err(NxError::InvalidMagicBytes);
         }
 
-        let mut index = 4;
-
         Ok(Self {
-            node_count: Self::get_u32(data, &mut index)?,
-            node_offset: Self::get_u64(data, &mut index)?,
-            string_count: Self::get_u32(data, &mut index)?,
-            string_offset: Self::get_u64(data, &mut index)?,
-            bitmap_count: Self::get_u32(data, &mut index)?,
-            bitmap_offset: Self::get_u64(data, &mut index)?,
-            audio_count: Self::get_u32(data, &mut index)?,
-            audio_offset: Self::get_u64(data, &mut index)?,
+            node_count: data.try_get_u32(4)?,
+            node_offset: data.try_get_u64(8)?,
+            string_count: data.try_get_u32(16)?,
+            string_offset: data.try_get_u64(20)?,
+            bitmap_count: data.try_get_u32(28)?,
+            bitmap_offset: data.try_get_u64(32)?,
+            audio_count: data.try_get_u32(40)?,
+            audio_offset: data.try_get_u64(44)?,
         })
-    }
-
-    fn get_u32(data: &[u8], index: &mut usize) -> Result<u32, NxError> {
-        let bytes = data
-            .get(*index..*index + size_of::<u32>())
-            .ok_or(NxError::InvalidHeader)?;
-
-        let num = u32::from_le_bytes(bytes.try_into().map_err(|_| NxError::InvalidHeader)?);
-
-        *index += size_of::<u32>();
-        Ok(num)
-    }
-
-    fn get_u64(data: &[u8], index: &mut usize) -> Result<u64, NxError> {
-        let bytes = data
-            .get(*index..*index + size_of::<u64>())
-            .ok_or(NxError::InvalidHeader)?;
-
-        let num = u64::from_le_bytes(bytes.try_into().map_err(|_| NxError::InvalidHeader)?);
-
-        *index += size_of::<u64>();
-        Ok(num)
     }
 }
 
