@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use glium::{
     backend::glutin::SimpleWindowBuilder,
     glutin::surface::WindowSurface,
@@ -9,6 +11,9 @@ use glium::{
     },
     Display, Program, Surface,
 };
+use nx::NxFile;
+
+mod nx;
 
 #[derive(Default)]
 struct App {
@@ -107,6 +112,8 @@ impl ApplicationHandler for App {
 }
 
 fn main() {
+    let ui_nx = NxFile::open(Path::new("nx/UI.nx")).unwrap();
+
     let event_loop = EventLoop::new().unwrap();
     let mut app = App::default();
     event_loop.run_app(&mut app).unwrap();
