@@ -28,9 +28,10 @@ impl NxFile {
         Ok(Self { data, header, root })
     }
 
-    pub fn get(&self, name: &str) -> Option<NxNode> {
-        let mut index = self.header.node_offset + self.root.children as u64 * NX_NODE_OFFSET;
-        let mut count = self.root.count as u64;
+    // TODO we should allow x/y/z querying
+    fn get_node(&self, root: &NxNode, name: &str) -> Option<NxNode> {
+        let mut index = self.header.node_offset + root.children as u64 * NX_NODE_OFFSET;
+        let mut count = root.count as u64;
 
         while count > 0 {
             let middle = count / 2;
@@ -132,7 +133,7 @@ pub enum NxError {
     InvalidCast(#[from] core::array::TryFromSliceError),
 
     #[error("invalid string")]
-    InvalidString,
+    InvalidString(#[from] core::str::Utf8Error),
 }
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
@@ -240,6 +241,6 @@ impl NxTryGet for [u8] {
                     usize_index + usize_len,
                 ))?;
 
-        Ok(str::from_utf8(bytes).map_err(|_| NxError::InvalidString)?)
+        Ok(str::from_utf8(bytes)?)
     }
 }

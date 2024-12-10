@@ -120,7 +120,7 @@ fn main() {
         }
     };
 
-    let x = ui_nx.get("Basic.img").unwrap();
+    // let x = ui_nx.get("Basic.img/Cursor/0/0").unwrap();
 
     let event_loop = EventLoop::new().unwrap();
     let mut app = App::default();
