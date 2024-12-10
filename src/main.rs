@@ -112,13 +112,15 @@ impl ApplicationHandler for App {
 }
 
 fn main() {
-    match NxFile::open(Path::new("nx/UI.nx")) {
+    let ui_nx = match NxFile::open(Path::new("nx/UI.nx")) {
         Ok(file) => file,
         Err(err) => {
             println!("{}", err);
             return;
         }
     };
+
+    let x = ui_nx.get("Basic.img").unwrap();
 
     let event_loop = EventLoop::new().unwrap();
     let mut app = App::default();
