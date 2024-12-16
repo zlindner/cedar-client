@@ -3,23 +3,26 @@ use std::path::Path;
 use glium::{
     backend::glutin::SimpleWindowBuilder,
     glutin::surface::WindowSurface,
+    implement_vertex,
+    index::{NoIndices, PrimitiveType},
+    texture::{RawImage2d, Texture2d},
+    uniform,
     winit::{
         application::ApplicationHandler,
         event::WindowEvent,
         event_loop::{ActiveEventLoop, EventLoop},
         window::{Window, WindowId},
     },
-    Display, Program, Surface,
+    Display, Program, Surface, VertexBuffer,
 };
-use nx::NxFile;
-
-mod nx;
+use nx_pkg4::file::NxFile;
 
 #[derive(Default)]
 struct App {
     window: Option<Window>,
     display: Option<Display<WindowSurface>>,
     program: Option<Program>,
+    ui_nx: Option<NxFile>,
 }
 
 impl ApplicationHandler for App {
@@ -32,56 +35,47 @@ impl ApplicationHandler for App {
         let vertex_shader_src = r#"
             #version 410 core
 
-            in vec4 coord;
-            in vec4 color;
+            in vec2 position;
+            in vec2 tex_coords;
+            in vec4 colour;
 
-            out vec2 texpos;
-            out vec4 colormod;
+            out vec2 v_tex_coords;
+            out vec4 v_colour;
 
-            uniform vec2 screensize;
-            uniform int yoffset;
+            uniform vec2 screen_size;
+            uniform int y_offset;
 
             void main(void)
             {
-                float x = -1.0 + coord.x * 2.0 / screensize.x;
-                float y = 1.0 - (coord.y + float(yoffset)) * 2.0 / screensize.y;
-                gl_Position = vec4(x, y, 0.0, 1.0);
-                texpos = coord.zw;
-                colormod = color;
+                float x = -1.0 + position.x * 2.0 / screen_size.x;
+			    float y = 1.0 - (position.y + y_offset) * 2.0 / screen_size.y;
+
+                gl_Position = vec4(position.x, position.y, 0.0, 1.0);
+                
+                v_tex_coords = tex_coords;
+                v_colour = colour;
             }
         "#;
 
         let fragment_shader_src = r#"
             #version 410 core
 
-		    in vec2 texpos;
-            in vec4 colormod;
+		    in vec2 v_tex_coords;
+            in vec4 v_colour;
+            
+            out vec4 colour;
 
             uniform sampler2D tex;
-            uniform vec2 atlassize;
-            uniform int fontregion;
-
-            out vec4 FragColor;
 
             void main(void)
             {
-                if (texpos.y == 0)
-                {
-                    FragColor = colormod;
-                }
-                else if (texpos.y <= float(fontregion))
-                {
-                    FragColor = vec4(1, 1, 1, texture(tex, texpos / atlassize).r) * colormod;
-                }
-                else
-                {
-                    FragColor = texture(tex, texpos / atlassize) * colormod;
-                }
+                colour = texture(tex, v_tex_coords);
             }
         "#;
 
         self.window = Some(window);
         self.display = Some(display);
+
         self.program = Some(
             Program::from_source(
                 self.display.as_ref().unwrap(),
@@ -91,6 +85,8 @@ impl ApplicationHandler for App {
             )
             .unwrap(),
         );
+
+        self.ui_nx = Some(NxFile::open(Path::new("nx/UI.nx")).unwrap());
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
@@ -100,8 +96,85 @@ impl ApplicationHandler for App {
             }
             WindowEvent::RedrawRequested => {
                 let display = self.display.as_ref().unwrap();
+
                 let mut target = display.draw();
-                target.clear_color(0.0, 0.0, 1.0, 1.0);
+                target.clear_color(1.0, 1.0, 1.0, 1.0);
+
+                let root = self.ui_nx.as_ref().unwrap().root();
+                let basic = root.get("Basic.img").unwrap();
+                let cursor = basic.get("Cursor").unwrap();
+                let cursor_0 = cursor.get("0").unwrap();
+                let cursor_0_0 = cursor_0.get("0").unwrap();
+
+                let bitmap = cursor_0_0.bitmap().unwrap().unwrap();
+
+                let image = RawImage2d::from_raw_rgba_reversed(
+                    &bitmap.data,
+                    (bitmap.width.into(), bitmap.height.into()),
+                );
+
+                let texture = Texture2d::new(display, image).unwrap();
+
+                #[derive(Copy, Clone)]
+                struct Vertex {
+                    position: [f32; 2],
+                    tex_coords: [f32; 2],
+                    colour: [f32; 4],
+                }
+
+                implement_vertex!(Vertex, position, tex_coords, colour);
+
+                let shape = vec![
+                    Vertex {
+                        position: [-0.5, -0.5],
+                        tex_coords: [0.0, 0.0],
+                        colour: [0.0, 0.0, 0.0, 1.0],
+                    },
+                    Vertex {
+                        position: [0.5, -0.5],
+                        tex_coords: [1.0, 0.0],
+                        colour: [0.0, 0.0, 0.0, 1.0],
+                    },
+                    Vertex {
+                        position: [0.5, 0.5],
+                        tex_coords: [1.0, 1.0],
+                        colour: [0.0, 0.0, 0.0, 1.0],
+                    },
+                    Vertex {
+                        position: [0.5, 0.5],
+                        tex_coords: [1.0, 1.0],
+                        colour: [0.0, 0.0, 0.0, 1.0],
+                    },
+                    Vertex {
+                        position: [-0.5, 0.5],
+                        tex_coords: [0.0, 1.0],
+                        colour: [0.0, 0.0, 0.0, 1.0],
+                    },
+                    Vertex {
+                        position: [-0.5, -0.5],
+                        tex_coords: [0.0, 0.0],
+                        colour: [0.0, 0.0, 0.0, 1.0],
+                    },
+                ];
+                let indices = NoIndices(PrimitiveType::TrianglesList);
+                let vertex_buffer = VertexBuffer::new(display, &shape).unwrap();
+
+                let uniforms = uniform! {
+                    screen_size: [800.0_f32, 600.0_f32],
+                    y_offset: 0,
+                    tex: &texture,
+                };
+
+                target
+                    .draw(
+                        &vertex_buffer,
+                        &indices,
+                        self.program.as_ref().unwrap(),
+                        &uniforms,
+                        &Default::default(),
+                    )
+                    .unwrap();
+
                 target.finish().unwrap();
 
                 self.window.as_ref().unwrap().request_redraw();
@@ -112,16 +185,6 @@ impl ApplicationHandler for App {
 }
 
 fn main() {
-    let ui_nx = match NxFile::open(Path::new("nx/UI.nx")) {
-        Ok(file) => file,
-        Err(err) => {
-            println!("{}", err);
-            return;
-        }
-    };
-
-    // let x = ui_nx.get("Basic.img/Cursor/0/0").unwrap();
-
     let event_loop = EventLoop::new().unwrap();
     let mut app = App::default();
     event_loop.run_app(&mut app).unwrap();

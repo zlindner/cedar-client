@@ -201,6 +201,7 @@ dependencies = [
  "glium",
  "lz4_flex",
  "memmap2",
+ "nx-pkg4",
  "thiserror 2.0.6",
 ]
 
@@ -698,6 +699,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "nx-pkg4"
+version = "0.1.0"
+dependencies = [
+ "lz4_flex",
+ "memmap2",
+ "thiserror 2.0.6",
 ]
 
 [[package]]
