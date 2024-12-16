@@ -50,6 +50,25 @@ impl App {
             .expect("event loop should run");
     }
 
+    fn render(&mut self, event_loop: &ActiveEventLoop) {
+        match self.gpu.render() {
+            Ok(_) => {}
+            // Reconfigure the surface if it's lost/outdated.
+            Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
+                self.resize(self.window.inner_size());
+            }
+            // The system is OOM - we should quit the app.
+            Err(wgpu::SurfaceError::OutOfMemory) => {
+                // TODO: log an error.
+                event_loop.exit();
+            }
+            // A frame took too long to render.
+            Err(wgpu::SurfaceError::Timeout) => {
+                // TODO: log a warning.
+            }
+        };
+    }
+
     fn resize(&mut self, new_size: PhysicalSize<u32>) {
         if new_size.width > 0 && new_size.height > 0 {
             self.gpu.resize(new_size);
@@ -81,7 +100,11 @@ impl ApplicationHandler for AppState {
                 event_loop.exit();
             }
             WindowEvent::RedrawRequested => {
-                // TODO:
+                app.window.request_redraw();
+
+                // TODO: we should call some `app.update()` fn here.
+
+                app.render(event_loop);
             }
             WindowEvent::Resized(new_size) => {
                 app.resize(new_size);
@@ -95,9 +118,9 @@ struct Gpu {
     instance: wgpu::Instance,
     surface: wgpu::Surface<'static>,
     adapter: wgpu::Adapter,
-    surface_config: wgpu::SurfaceConfiguration,
     device: wgpu::Device,
     queue: wgpu::Queue,
+    surface_config: wgpu::SurfaceConfiguration,
 }
 
 impl Gpu {
@@ -118,11 +141,6 @@ impl Gpu {
             .await
             .expect("adapter should be created");
 
-        let size = window.inner_size();
-        let surface_config = surface
-            .get_default_config(&adapter, size.width, size.height)
-            .expect("surface configuration should be created");
-
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
@@ -136,14 +154,65 @@ impl Gpu {
             .await
             .expect("device and queue should be created");
 
+        let size = window.inner_size();
+
+        // TODO: we can modify this to support things such as vsync, different frame rates, etc.
+        let surface_config = surface
+            .get_default_config(&adapter, size.width, size.height)
+            .expect("surface configuration should be created");
+
+        surface.configure(&device, &surface_config);
+
         Self {
             instance,
             surface,
             adapter,
-            surface_config,
             device,
             queue,
+            surface_config,
         }
+    }
+
+    fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
+        let output = self.surface.get_current_texture()?;
+
+        let view = output
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Render Encoder"),
+            });
+
+        let render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Render Pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color {
+                        r: 0.1,
+                        g: 0.2,
+                        b: 0.3,
+                        a: 1.0,
+                    }),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            occlusion_query_set: None,
+            timestamp_writes: None,
+        });
+
+        // The render pass must be dropped before calling `encoder.finish()`.
+        drop(render_pass);
+
+        self.queue.submit(std::iter::once(encoder.finish()));
+        output.present();
+
+        Ok(())
     }
 
     fn resize(&mut self, new_size: PhysicalSize<u32>) {
