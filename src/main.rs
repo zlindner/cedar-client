@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use winit::{
     application::ApplicationHandler,
+    dpi::PhysicalSize,
     event::WindowEvent,
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     window::{Window, WindowId},
@@ -18,15 +19,6 @@ struct App {
 }
 
 impl App {
-    fn run() {
-        let event_loop = EventLoop::new().expect("event loop should be created");
-        event_loop.set_control_flow(ControlFlow::Poll);
-
-        event_loop
-            .run_app(&mut AppState::Uninitialized)
-            .expect("event loop should run");
-    }
-
     fn new(event_loop: &ActiveEventLoop) -> Self {
         let window_attributes = Window::default_attributes().with_title("CedarMS");
 
@@ -48,15 +40,42 @@ impl App {
 
         Self { window, gpu }
     }
+
+    fn run() {
+        let event_loop = EventLoop::new().expect("event loop should be created");
+        event_loop.set_control_flow(ControlFlow::Poll);
+
+        event_loop
+            .run_app(&mut AppState::Uninitialized)
+            .expect("event loop should run");
+    }
+
+    fn resize(&mut self, new_size: PhysicalSize<u32>) {
+        if new_size.width > 0 && new_size.height > 0 {
+            self.gpu.resize(new_size);
+        }
+    }
 }
 
 impl ApplicationHandler for AppState {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        match self {
+            AppState::Uninitialized => *self = AppState::Initialized(App::new(event_loop)),
+            AppState::Initialized(_) => return,
+        }
+    }
+
     fn window_event(
         &mut self,
         event_loop: &ActiveEventLoop,
         window_id: WindowId,
         event: WindowEvent,
     ) {
+        let app = match self {
+            AppState::Uninitialized => return,
+            AppState::Initialized(app) => app,
+        };
+
         match event {
             WindowEvent::CloseRequested => {
                 event_loop.exit();
@@ -64,14 +83,10 @@ impl ApplicationHandler for AppState {
             WindowEvent::RedrawRequested => {
                 // TODO:
             }
+            WindowEvent::Resized(new_size) => {
+                app.resize(new_size);
+            }
             _ => (),
-        }
-    }
-
-    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        match self {
-            AppState::Uninitialized => *self = AppState::Initialized(App::new(event_loop)),
-            _ => return,
         }
     }
 }
@@ -80,6 +95,7 @@ struct Gpu {
     instance: wgpu::Instance,
     surface: wgpu::Surface<'static>,
     adapter: wgpu::Adapter,
+    surface_config: wgpu::SurfaceConfiguration,
     device: wgpu::Device,
     queue: wgpu::Queue,
 }
@@ -102,6 +118,11 @@ impl Gpu {
             .await
             .expect("adapter should be created");
 
+        let size = window.inner_size();
+        let surface_config = surface
+            .get_default_config(&adapter, size.width, size.height)
+            .expect("surface configuration should be created");
+
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
@@ -119,9 +140,16 @@ impl Gpu {
             instance,
             surface,
             adapter,
+            surface_config,
             device,
             queue,
         }
+    }
+
+    fn resize(&mut self, new_size: PhysicalSize<u32>) {
+        self.surface_config.width = new_size.width;
+        self.surface_config.height = new_size.height;
+        self.surface.configure(&self.device, &self.surface_config);
     }
 }
 
