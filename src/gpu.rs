@@ -8,20 +8,24 @@ use crate::texture::Texture;
 
 const VERTICES: &[Vertex] = &[
     Vertex {
-        position: [0.0, 0.5, 0.0],
-        tex_coords: [1.0, 1.0],
-    },
-    Vertex {
         position: [-0.5, -0.5, 0.0],
-        tex_coords: [0.5, 0.0],
+        tex_coords: [0.0, 1.0],
     },
     Vertex {
         position: [0.5, -0.5, 0.0],
-        tex_coords: [0.0, 0.5],
+        tex_coords: [1.0, 1.0],
+    },
+    Vertex {
+        position: [0.5, 0.5, 0.0],
+        tex_coords: [1.0, 0.0],
+    },
+    Vertex {
+        position: [-0.5, 0.5, 0.0],
+        tex_coords: [0.0, 0.0],
     },
 ];
 
-const INDICES: &[u16] = &[0, 1, 2];
+const INDICES: &[u16] = &[0, 1, 2, 2, 3, 0];
 
 pub struct Gpu {
     instance: wgpu::Instance,
@@ -126,7 +130,7 @@ impl Gpu {
                 entry_point: Some("fs_main"),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: surface_config.format,
-                    blend: Some(wgpu::BlendState::REPLACE),
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
