@@ -1,12 +1,13 @@
-use std::sync::Arc;
+use std::{path::Path, sync::Arc};
 
 use gpu::Gpu;
+use nx_pkg4::file::NxFile;
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
     event::WindowEvent,
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
-    window::{Window, WindowId},
+    window::{Cursor, CustomCursor, Window, WindowId},
 };
 
 mod gpu;
@@ -24,7 +25,29 @@ struct App {
 
 impl App {
     fn new(event_loop: &ActiveEventLoop) -> Self {
-        let window_attributes = Window::default_attributes().with_title("CedarMS");
+        let ui_nx = NxFile::open(Path::new("nx/UI.nx")).unwrap();
+        let root = ui_nx.root();
+        let base = root.get("Basic.img").unwrap();
+        let cursor = base.get("Cursor").unwrap();
+        let cursor_0 = cursor.get("0").unwrap();
+        let cursor_0_0 = cursor_0.get("0").unwrap();
+        let bitmap = cursor_0_0.bitmap().unwrap().unwrap();
+
+        let mut bgra = bitmap.data.clone();
+
+        for pixel in bgra.chunks_exact_mut(4) {
+            pixel.swap(0, 2); // Swap R (index 0) and B (index 2)
+        }
+
+        // TODO: we need to call window.set_cursor when required to change cursor icon.
+        // TODO: we need to figure out the right x and y hotspots.
+        let cursor = event_loop.create_custom_cursor(
+            CustomCursor::from_rgba(bgra, bitmap.width, bitmap.height, 7, 7).unwrap(),
+        );
+
+        let window_attributes = Window::default_attributes()
+            .with_title("CedarMS")
+            .with_cursor(Cursor::Custom(cursor));
 
         let window = Arc::new(
             event_loop
@@ -112,12 +135,6 @@ impl ApplicationHandler for AppState {
             }
             WindowEvent::Resized(new_size) => {
                 app.resize(new_size);
-            }
-            WindowEvent::CursorMoved {
-                position: new_position,
-                ..
-            } => {
-                // TODO: we should call some `cursor.update(new_position)` here.
             }
             _ => (),
         }
