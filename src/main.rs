@@ -10,6 +10,7 @@ use winit::{
 };
 
 mod gpu;
+mod texture;
 
 enum AppState {
     Uninitialized,
