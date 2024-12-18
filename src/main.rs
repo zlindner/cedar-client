@@ -182,7 +182,9 @@ impl ApplicationHandler for CedarState {
 }
 
 fn main() {
-    // TODO: setup tracing
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::INFO)
+        .init();
 
     let event_loop = EventLoop::new().expect("event loop should be created");
     event_loop.set_control_flow(ControlFlow::Poll);

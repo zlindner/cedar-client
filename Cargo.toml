@@ -4,9 +4,13 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-nx-pkg4 = { path = "../nx-pkg4" }
-tokio = { version = "1.42.0", features = ["full"] }
-winit = "0.30.5"
-wgpu = "23.0.1"
 bytemuck = { version = "1.20.0", features = ["derive"] }
 downcast-rs = "1.2.1"
+log = "0.4.22"
+nx-pkg4 = { path = "../nx-pkg4" }
+tokio = { version = "1.42.0", features = ["full"] }
+tracing = "0.1.41"
+tracing-attributes = "0.1.28"
+winit = "0.30.5"
+wgpu = "23.0.1"
+tracing-subscriber = "0.3.19"
