@@ -2,6 +2,7 @@ use std::{collections::HashMap, path::Path};
 
 use nx_pkg4::{file::NxFile, node::NxNode};
 
+// TODO: this can probably just be AssetManager
 pub struct NxManager {
     data: HashMap<NxFileType, NxFile>,
 }

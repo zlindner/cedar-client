@@ -1,12 +1,9 @@
 use std::{path::Path, sync::Arc};
 
 use ecs::World;
-use engine::{
-    render::{BitmapRenderItem, RenderItem},
-    resource::{NxFileType, NxManager},
-    Renderer,
-};
+use graphics::{BitmapRenderItem, RenderItem, Renderer};
 use nx_pkg4::{file::NxFile, node::Node};
+use resource::{nx_manager::NxFileType, NxManager, WindowProxy};
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
@@ -16,8 +13,8 @@ use winit::{
 };
 
 mod ecs;
-mod engine;
-mod game;
+mod graphics;
+mod resource;
 
 enum CedarState {
     Uninitialized,
@@ -74,19 +71,23 @@ impl Cedar {
             .build()
             .expect("tokio runtime should be created");
 
-        let mut renderer = runtime.block_on(Renderer::new(window.clone()));
-
-        // FIXME: not a huge fan of this.
-        renderer.init();
-
-        let mut world = World::new();
-        world.insert_resource(NxManager::new());
+        let renderer = runtime.block_on(Renderer::new(window.clone()));
 
         Self {
             window,
             renderer,
-            world,
+            world: World::new(),
         }
+    }
+
+    fn init(&mut self) {
+        self.renderer.init();
+
+        self.world.insert_resource(NxManager::new());
+        self.world.insert_resource(WindowProxy::new(
+            self.window.inner_size(),
+            self.window.scale_factor(),
+        ));
     }
 
     fn render(&mut self, event_loop: &ActiveEventLoop) {
@@ -137,7 +138,11 @@ impl Cedar {
 impl ApplicationHandler for CedarState {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         match self {
-            CedarState::Uninitialized => *self = CedarState::Initialized(Cedar::new(event_loop)),
+            CedarState::Uninitialized => {
+                let mut cedar = Cedar::new(event_loop);
+                cedar.init();
+                *self = CedarState::Initialized(cedar);
+            }
             CedarState::Initialized(_) => return,
         }
     }
@@ -166,6 +171,10 @@ impl ApplicationHandler for CedarState {
             }
             WindowEvent::Resized(new_size) => {
                 cedar.renderer.resize(new_size);
+                cedar
+                    .world
+                    .window()
+                    .resize(new_size, cedar.window.scale_factor());
             }
             _ => (),
         }

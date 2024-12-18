@@ -1,13 +1,13 @@
 use std::{
     any::TypeId,
-    cell::{Ref, RefCell},
+    cell::{Ref, RefCell, RefMut},
     collections::HashMap,
     hash::Hasher,
 };
 
 use downcast_rs::{impl_downcast, Downcast};
 
-use crate::engine::resource::NxManager;
+use crate::resource::{NxManager, WindowProxy};
 
 pub struct World {
     resources: HashMap<ResourceTypeId, RefCell<Box<dyn Resource>>>,
@@ -32,9 +32,21 @@ impl World {
             .map(|x| Ref::map(x.borrow(), |inner| inner.downcast_ref::<T>().unwrap()))
     }
 
+    pub fn get_resource_mut<T: Resource>(&self) -> Option<RefMut<T>> {
+        let type_id = &ResourceTypeId::of::<T>();
+        self.resources
+            .get(type_id)
+            .map(|x| RefMut::map(x.borrow_mut(), |inner| inner.downcast_mut::<T>().unwrap()))
+    }
+
     pub fn nx(&self) -> Ref<NxManager> {
         self.get_resource::<NxManager>()
             .expect("NxManager should exist")
+    }
+
+    pub fn window(&self) -> RefMut<WindowProxy> {
+        self.get_resource_mut::<WindowProxy>()
+            .expect("WindowProxy should exist")
     }
 }
 

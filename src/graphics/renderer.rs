@@ -271,7 +271,7 @@ impl BitmapRenderItem {
 
         let shader = renderer
             .device
-            .create_shader_module(include_wgsl!("bitmap_shader.wgsl"));
+            .create_shader_module(include_wgsl!("shaders/bitmap.wgsl"));
 
         let render_pipeline =
             renderer
