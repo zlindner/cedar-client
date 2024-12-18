@@ -258,6 +258,7 @@ name = "cedar-client"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
+ "downcast-rs",
  "nx-pkg4",
  "tokio",
  "wgpu",
