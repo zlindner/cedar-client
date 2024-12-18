@@ -1,9 +1,13 @@
-use std::{path::Path, sync::Arc};
+use std::{
+    path::Path,
+    sync::{mpsc, Arc},
+};
 
 use ecs::World;
-use graphics::{BitmapRenderItem, RenderItem, Renderer};
+use graphics::{BitmapRenderItem, RenderItem, Renderer, RendererEvent};
 use nx_pkg4::{file::NxFile, node::Node};
-use resource::{asset_manager::NxFileType, AssetManager, WindowProxy};
+use resource::{AssetManager, WindowProxy};
+use scene::{LoginScene, Scene};
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
@@ -15,6 +19,7 @@ use winit::{
 mod ecs;
 mod graphics;
 mod resource;
+mod scene;
 
 enum CedarState {
     Uninitialized,
@@ -23,8 +28,9 @@ enum CedarState {
 
 struct Cedar {
     window: Arc<Window>,
-    renderer: Renderer,
+    renderer_tx: mpsc::Sender<RendererEvent>,
     world: World,
+    scene: Box<dyn Scene>,
 }
 
 impl Cedar {
@@ -63,75 +69,34 @@ impl Cedar {
                 .expect("window should be created"),
         );
 
-        // TODO: we might eventually want an actual runtime for connection handling.
-        // I think all of the winit + wgpu stuff needs to be created on the main thread.
-        let runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(1)
-            .enable_all()
-            .build()
-            .expect("tokio runtime should be created");
+        // Initialize the renderer, passing it the channel receiver.
+        // The channel is used for other components to send updates directly to the renderer,
+        // ex. an entity was added to the world to be rendered, an asset was registered, etc.
+        let (renderer_tx, renderer_rx) = mpsc::channel::<RendererEvent>();
+        let renderer = futures::executor::block_on(Renderer::new(window.clone(), renderer_rx));
 
-        let renderer = runtime.block_on(Renderer::new(window.clone()));
+        // Start a new thread for the renderer.
+        // NOTE: creating the renderer must be done on the main thread.
+        std::thread::spawn(move || renderer.run());
 
         Self {
             window,
-            renderer,
+            renderer_tx,
             world: World::new(),
+            scene: Box::new(LoginScene::default()),
         }
     }
 
     fn init(&mut self) {
-        self.renderer.init();
-
-        self.world.insert_resource(AssetManager::new());
+        // Add default resources to the world.
+        self.world
+            .insert_resource(AssetManager::new(self.renderer_tx.clone()));
         self.world.insert_resource(WindowProxy::new(
             self.window.inner_size(),
             self.window.scale_factor(),
         ));
-    }
 
-    fn render(&mut self, event_loop: &ActiveEventLoop) {
-        let mut items = Vec::new();
-
-        let assets = self.world.assets();
-
-        let nexon = assets
-            .nx(NxFileType::Map001)
-            .get("Back")
-            .get("login.img")
-            .get("back")
-            .get("11")
-            .bitmap()
-            .unwrap()
-            .unwrap();
-
-        // HACK: find a place to register the bitmap with the renderer, probably somewhere in world/assetmanager.
-        self.renderer
-            .register_bitmap("Back/login.img/back/11", nexon);
-
-        items.push(RenderItem::Bitmap(BitmapRenderItem {
-            name: "Back/login.img/back/11".to_string(),
-        }));
-
-        // TODO: populate items with all of the render items.
-        // ex. for _ in world.query<&Bitmap>().iter()...
-
-        match self.renderer.render(items) {
-            Ok(_) => {}
-            // Reconfigure the surface if it's lost/outdated.
-            Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
-                self.renderer.resize(self.window.inner_size());
-            }
-            // The system is OOM - we should quit the app.
-            Err(wgpu::SurfaceError::OutOfMemory) => {
-                // TODO: log an error.
-                event_loop.exit();
-            }
-            // A frame took too long to render.
-            Err(wgpu::SurfaceError::Timeout) => {
-                // TODO: log a warning.
-            }
-        };
+        self.scene.init(&mut self.world);
     }
 }
 
@@ -162,15 +127,32 @@ impl ApplicationHandler for CedarState {
             WindowEvent::CloseRequested => {
                 event_loop.exit();
             }
+            // FIXME: this sends way too many updates and floods the channel.
+            // Need to keep track of time here.
             WindowEvent::RedrawRequested => {
                 cedar.window.request_redraw();
 
-                // TODO: we should call some `app.update()` fn here.
+                let assets = cedar.world.assets();
+                let mut items = Vec::new();
 
-                cedar.render(event_loop);
+                // TODO: this renders all registered bitmaps, we probably need some "should_render/hidden" flag.
+                for bitmap in assets.get_bitmaps().iter() {
+                    items.push(RenderItem::Bitmap(BitmapRenderItem {
+                        name: bitmap.to_string(),
+                    }));
+                }
+
+                cedar
+                    .renderer_tx
+                    .send(RendererEvent::Render(items))
+                    .unwrap();
             }
             WindowEvent::Resized(new_size) => {
-                cedar.renderer.resize(new_size);
+                cedar
+                    .renderer_tx
+                    .send(RendererEvent::Resize(new_size))
+                    .unwrap();
+
                 cedar
                     .world
                     .window()

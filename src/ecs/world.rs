@@ -44,6 +44,11 @@ impl World {
             .expect("AssetManager should exist")
     }
 
+    pub fn assets_mut(&self) -> RefMut<AssetManager> {
+        self.get_resource_mut::<AssetManager>()
+            .expect("AssetManager should exist")
+    }
+
     pub fn window(&self) -> RefMut<WindowProxy> {
         self.get_resource_mut::<WindowProxy>()
             .expect("WindowProxy should exist")
@@ -53,6 +58,7 @@ impl World {
 pub trait Resource: 'static + Downcast {}
 
 impl<T> Resource for T where T: 'static {}
+
 impl_downcast!(Resource);
 
 #[derive(Copy, Clone, Debug, Eq, PartialOrd, Ord)]

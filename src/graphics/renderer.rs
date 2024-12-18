@@ -1,4 +1,8 @@
-use std::{collections::HashMap, iter, sync::Arc};
+use std::{
+    collections::HashMap,
+    iter,
+    sync::{mpsc, Arc},
+};
 
 use nx_pkg4::NxBitmap;
 use winit::{dpi::PhysicalSize, window::Window};
@@ -6,6 +10,8 @@ use winit::{dpi::PhysicalSize, window::Window};
 use super::{BitmapRenderItem, RenderItem};
 
 pub struct Renderer {
+    receiver: mpsc::Receiver<RendererEvent>,
+
     surface: wgpu::Surface<'static>,
     pub(crate) device: wgpu::Device,
     queue: wgpu::Queue,
@@ -23,11 +29,12 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub async fn new(window: Arc<Window>) -> Self {
+    pub async fn new(window: Arc<Window>, receiver: mpsc::Receiver<RendererEvent>) -> Self {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
 
+        let window_size = window.inner_size();
         let surface = instance
-            .create_surface(window.clone())
+            .create_surface(window)
             .expect("surface should be created");
 
         let adapter = instance
@@ -51,8 +58,6 @@ impl Renderer {
             )
             .await
             .expect("device and queue should be created");
-
-        let window_size = window.inner_size();
 
         let config = surface
             .get_default_config(&adapter, window_size.width, window_size.height)
@@ -83,7 +88,8 @@ impl Renderer {
                 label: None,
             });
 
-        Self {
+        let mut renderer = Self {
+            receiver,
             surface,
             device,
             queue,
@@ -93,11 +99,52 @@ impl Renderer {
             vertex_buffers: HashMap::new(),
             index_buffers: HashMap::new(),
             bitmap_bind_groups: HashMap::new(),
-        }
+        };
+
+        // TODO: fix this weirdness.
+        BitmapRenderItem::create_renderer_components(&mut renderer);
+        renderer
     }
 
-    pub fn init(&mut self) {
-        BitmapRenderItem::create_renderer_components(self);
+    pub fn run(mut self) {
+        // TODO: set this flag... somewhere.
+        let should_render = true;
+
+        loop {
+            if let Ok(event) = self.receiver.recv() {
+                // TODO: we might want to process all updates other than Render first,
+                // then process render updates.
+                // Its probably possible for something to start rendering before we have
+                // had the chance to create the bind groups for it, etc.
+                match event {
+                    RendererEvent::RegisterBitmap(name, bitmap) => {
+                        self.register_bitmap(&name, bitmap)
+                    }
+                    RendererEvent::Render(items) => {
+                        // We aren't ready to render the next frame.
+                        if !should_render {
+                            continue;
+                        }
+
+                        match self.render(items) {
+                            Ok(_) => {}
+                            Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
+                                // self.resize(self.window.inner_size());
+                            }
+                            Err(wgpu::SurfaceError::OutOfMemory) => {
+                                log::error!("System is out of memory, exiting");
+                                // TODO: event_loop.exit();
+                                // can probably use a one-shot channel for this.
+                            }
+                            Err(wgpu::SurfaceError::Timeout) => {
+                                log::warn!("Frame took longer than expected to render");
+                            }
+                        }
+                    }
+                    RendererEvent::Resize(new_size) => self.resize(new_size),
+                }
+            }
+        }
     }
 
     pub fn render(&mut self, mut items: Vec<RenderItem>) -> Result<(), wgpu::SurfaceError> {
@@ -140,7 +187,7 @@ impl Renderer {
             let vertex_buffer = self.vertex_buffers.get(item.get_type_name()).unwrap();
             render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
 
-            // Set the vertex buffer for the item type.
+            // Set the index buffer for the item type.
             let index_buffer = self.index_buffers.get(item.get_type_name()).unwrap();
             render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
 
@@ -165,9 +212,13 @@ impl Renderer {
     }
 
     pub fn resize(&mut self, new_size: PhysicalSize<u32>) {
+        log::info!("{:?}", new_size);
+
         if new_size.width > 0 && new_size.height > 0 {
             self.config.width = new_size.width;
             self.config.height = new_size.height;
+
+            // FIXME: this only works on the main thread
             self.surface.configure(&self.device, &self.config);
         }
     }
@@ -241,4 +292,10 @@ impl Renderer {
         self.bitmap_bind_groups
             .insert(name.to_string(), (texture_bind_group, texture));
     }
+}
+
+pub enum RendererEvent {
+    RegisterBitmap(String, NxBitmap),
+    Render(Vec<RenderItem>),
+    Resize(PhysicalSize<u32>),
 }
