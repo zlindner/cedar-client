@@ -7,7 +7,7 @@ use std::{
 
 use downcast_rs::{impl_downcast, Downcast};
 
-use crate::resource::{NxManager, WindowProxy};
+use crate::resource::{AssetManager, WindowProxy};
 
 pub struct World {
     resources: HashMap<ResourceTypeId, RefCell<Box<dyn Resource>>>,
@@ -39,9 +39,9 @@ impl World {
             .map(|x| RefMut::map(x.borrow_mut(), |inner| inner.downcast_mut::<T>().unwrap()))
     }
 
-    pub fn nx(&self) -> Ref<NxManager> {
-        self.get_resource::<NxManager>()
-            .expect("NxManager should exist")
+    pub fn assets(&self) -> Ref<AssetManager> {
+        self.get_resource::<AssetManager>()
+            .expect("AssetManager should exist")
     }
 
     pub fn window(&self) -> RefMut<WindowProxy> {

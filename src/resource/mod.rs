@@ -1,5 +1,5 @@
-pub use self::nx_manager::NxManager;
+pub use self::asset_manager::AssetManager;
 pub use self::window_proxy::WindowProxy;
 
-pub mod nx_manager;
+pub mod asset_manager;
 pub mod window_proxy;

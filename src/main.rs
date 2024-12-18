@@ -3,7 +3,7 @@ use std::{path::Path, sync::Arc};
 use ecs::World;
 use graphics::{BitmapRenderItem, RenderItem, Renderer};
 use nx_pkg4::{file::NxFile, node::Node};
-use resource::{nx_manager::NxFileType, NxManager, WindowProxy};
+use resource::{asset_manager::NxFileType, AssetManager, WindowProxy};
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
@@ -83,7 +83,7 @@ impl Cedar {
     fn init(&mut self) {
         self.renderer.init();
 
-        self.world.insert_resource(NxManager::new());
+        self.world.insert_resource(AssetManager::new());
         self.world.insert_resource(WindowProxy::new(
             self.window.inner_size(),
             self.window.scale_factor(),
@@ -93,10 +93,10 @@ impl Cedar {
     fn render(&mut self, event_loop: &ActiveEventLoop) {
         let mut items = Vec::new();
 
-        let nx_manager = self.world.get_resource::<NxManager>().unwrap();
+        let assets = self.world.assets();
 
-        let nexon = nx_manager
-            .get(NxFileType::Map001)
+        let nexon = assets
+            .nx(NxFileType::Map001)
             .get("Back")
             .get("login.img")
             .get("back")
