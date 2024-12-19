@@ -45,9 +45,12 @@ impl AssetManager {
 
         self.bitmaps.insert(name.to_string());
 
-        self.renderer_tx
+        if let Err(e) = self
+            .renderer_tx
             .send(RendererEvent::RegisterBitmap(name.to_string(), bitmap))
-            .unwrap();
+        {
+            log::error!("Error sending RegisterBitmap event: {}", e);
+        }
     }
 }
 

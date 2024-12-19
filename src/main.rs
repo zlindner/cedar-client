@@ -12,7 +12,7 @@ use scene::{LoginScene, Scene};
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
-    event::WindowEvent as WinitWindowEvent,
+    event::WindowEvent,
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     window::{Cursor, CustomCursor, Window, WindowId},
 };
@@ -24,14 +24,12 @@ mod scene;
 
 enum WindowState {
     Uninitialized,
-    Initialized(WindowEventHandler),
+    Initialized(WindowManager),
 }
 
-struct WindowEventHandler {
+struct WindowManager {
     sender: mpsc::Sender<WindowEvent>,
 }
-
-struct WindowEvent(WinitWindowEvent);
 
 struct Cedar {
     window: Arc<Window>,
@@ -75,7 +73,13 @@ impl Cedar {
         let mut rendered_frames_tracker = Instant::now();
 
         loop {
-            if limiter.ready_for_next_frame() {
+            if limiter.ready_for_update() {
+                self.handle_window_events();
+
+                limiter.last_update_start = Instant::now();
+            }
+
+            if limiter.ready_for_frame() {
                 let assets = self.world.assets();
                 let mut items = Vec::new();
 
@@ -87,7 +91,7 @@ impl Cedar {
                 }
 
                 if let Err(e) = self.renderer_tx.send(RendererEvent::Render(items)) {
-                    log::error!("Error sending render event: {}", e);
+                    log::error!("Error sending Render event: {}", e);
                 }
 
                 limiter.last_frame_start = Instant::now();
@@ -101,8 +105,9 @@ impl Cedar {
             }
 
             // TODO: we should figure out the right sleep here based on frame rate.
-            // Not sleeping causes 100% cpu usage.
-            // thread::sleep(limiter.tick_duration);
+            // Sleeping for the exact tick duration basically means it's impossible to reach our
+            // target frame rate. We might need to sleep for tick duration - loop iteration duration.
+            thread::sleep(limiter.tick_duration);
         }
     }
 
@@ -116,6 +121,25 @@ impl Cedar {
         ));
 
         self.scene.init(&mut self.world);
+    }
+
+    /// Handle any events sent from the ui thread.
+    /// This immediately returns if no events are in the channel.
+    fn handle_window_events(&self) {
+        while let Ok(event) = self.window_rx.try_recv() {
+            match event {
+                WindowEvent::Resized(new_size) => {
+                    if let Err(e) = self.renderer_tx.send(RendererEvent::Resize(new_size)) {
+                        log::error!("Error sending resize event to renderer: {}", e);
+                    }
+
+                    self.world
+                        .window()
+                        .resize(new_size, self.window.scale_factor());
+                }
+                _ => {}
+            }
+        }
     }
 }
 
@@ -160,8 +184,8 @@ impl ApplicationHandler for WindowState {
                     cedar.run();
                 });
 
-                let handler = WindowEventHandler { sender: window_tx };
-                *self = WindowState::Initialized(handler);
+                let manager = WindowManager { sender: window_tx };
+                *self = WindowState::Initialized(manager);
             }
             WindowState::Initialized(_) => return,
         }
@@ -171,34 +195,22 @@ impl ApplicationHandler for WindowState {
         &mut self,
         event_loop: &ActiveEventLoop,
         _window_id: WindowId,
-        event: WinitWindowEvent,
+        event: WindowEvent,
     ) {
-        let handler = match self {
+        let manager = match self {
             WindowState::Uninitialized => return,
-            WindowState::Initialized(handler) => handler,
+            WindowState::Initialized(manager) => manager,
         };
 
         match event {
-            WinitWindowEvent::CloseRequested => {
+            WindowEvent::CloseRequested => {
                 event_loop.exit();
             }
             e => {
-                // I'm pretty sure we can't send the WinitWindowEvent directly, should confirm this.
-                if let Err(e) = handler.sender.send(WindowEvent(e)) {
+                if let Err(e) = manager.sender.send(e) {
                     log::error!("Error sending window event: {}", e);
                 }
-            } /*
-              WindowEvent::Resized(new_size) => {
-                  cedar
-                      .renderer_tx
-                      .send(RendererEvent::Resize(new_size))
-                      .unwrap();
-
-                  cedar
-                      .world
-                      .window()
-                      .resize(new_size, cedar.window.scale_factor());
-              }*/
+            }
         }
     }
 }
@@ -218,6 +230,8 @@ fn main() {
 
 struct FrameLimiter {
     tick_duration: Duration,
+    target_update_duration: Duration,
+    last_update_start: Instant,
     target_frame_duration: Duration,
     last_frame_start: Instant,
 }
@@ -226,12 +240,18 @@ impl FrameLimiter {
     pub fn new(target_fps: u32) -> Self {
         Self {
             tick_duration: Duration::from_secs(1) / 120,
+            target_update_duration: Duration::from_secs(1) / target_fps,
+            last_update_start: Instant::now(),
             target_frame_duration: Duration::from_secs(1) / target_fps,
             last_frame_start: Instant::now(),
         }
     }
 
-    pub fn ready_for_next_frame(&self) -> bool {
+    pub fn ready_for_update(&self) -> bool {
+        Instant::now() - self.last_update_start > self.target_update_duration
+    }
+
+    pub fn ready_for_frame(&self) -> bool {
         Instant::now() - self.last_frame_start > self.target_frame_duration
     }
 }
