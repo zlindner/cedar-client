@@ -4,7 +4,7 @@ use std::{
     sync::mpsc,
 };
 
-use nx_pkg4::{file::NxFile, node::NxNode, NxBitmap};
+use nx_pkg4::{NxBitmap, NxFile, NxNode};
 
 use crate::graphics::RendererEvent;
 

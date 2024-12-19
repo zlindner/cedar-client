@@ -7,7 +7,6 @@ use std::{
 
 use ecs::World;
 use graphics::{BitmapRenderItem, RenderItem, Renderer, RendererEvent};
-use nx_pkg4::{file::NxFile, node::Node};
 use resource::{AssetManager, WindowProxy};
 use scene::{LoginScene, Scene};
 use winit::{
@@ -95,7 +94,6 @@ impl Cedar {
                 rendered_frames += 1;
             }
 
-            // hmm we are only getting 50fps...
             if rendered_frames_tracker.elapsed() >= Duration::from_secs(1) {
                 log::info!("rendered {} frames!", rendered_frames);
                 rendered_frames = 0;

@@ -915,6 +915,8 @@ dependencies = [
 [[package]]
 name = "nx-pkg4"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab85c85f83aafd0904549d3df8d851aa5d2060d722ef75926dc79ef0b6ad44e7"
 dependencies = [
  "lz4_flex",
  "memmap2",
