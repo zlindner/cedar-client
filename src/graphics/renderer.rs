@@ -107,9 +107,6 @@ impl Renderer {
     }
 
     pub fn run(mut self) {
-        // TODO: set this flag... somewhere.
-        let should_render = true;
-
         loop {
             if let Ok(event) = self.receiver.recv() {
                 // TODO: we might want to process all updates other than Render first,
@@ -121,11 +118,6 @@ impl Renderer {
                         self.register_bitmap(&name, bitmap)
                     }
                     RendererEvent::Render(items) => {
-                        // We aren't ready to render the next frame.
-                        if !should_render {
-                            continue;
-                        }
-
                         match self.render(items) {
                             Ok(_) => {}
                             Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {

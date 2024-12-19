@@ -1,6 +1,8 @@
 use std::{
     path::Path,
     sync::{mpsc, Arc},
+    thread,
+    time::{Duration, Instant},
 };
 
 use ecs::World;
@@ -11,7 +13,7 @@ use scene::{LoginScene, Scene};
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
-    event::WindowEvent,
+    event::WindowEvent as WinitWindowEvent,
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     window::{Cursor, CustomCursor, Window, WindowId},
 };
@@ -21,21 +23,28 @@ mod graphics;
 mod resource;
 mod scene;
 
-enum CedarState {
+enum WindowState {
     Uninitialized,
-    Initialized(Cedar),
+    Initialized(WindowEventHandler),
 }
+
+struct WindowEventHandler {
+    sender: mpsc::Sender<WindowEvent>,
+}
+
+struct WindowEvent(WinitWindowEvent);
 
 struct Cedar {
     window: Arc<Window>,
-    renderer_tx: mpsc::Sender<RendererEvent>,
     world: World,
     scene: Box<dyn Scene>,
+    renderer_tx: mpsc::Sender<RendererEvent>,
+    window_rx: mpsc::Receiver<WindowEvent>,
 }
 
 impl Cedar {
-    fn new(event_loop: &ActiveEventLoop) -> Self {
-        let ui_nx = NxFile::open(Path::new("nx/UI.nx")).unwrap();
+    fn new(event_loop: &ActiveEventLoop) {
+        /*let ui_nx = NxFile::open(Path::new("nx/UI.nx")).unwrap();
         let root = ui_nx.root();
         let nx_cursor = root
             .get("Basic.img")
@@ -56,34 +65,46 @@ impl Cedar {
         // TODO: we need to figure out the right x and y hotspots.
         let cursor = event_loop.create_custom_cursor(
             CustomCursor::from_rgba(bgra, nx_cursor.width, nx_cursor.height, 7, 7).unwrap(),
-        );
+        );*/
+    }
 
-        let window_attributes = Window::default_attributes()
-            .with_title("CedarMS")
-            .with_inner_size(LogicalSize::new(800, 600))
-            .with_cursor(Cursor::Custom(cursor));
+    fn run(mut self) {
+        self.init();
 
-        let window = Arc::new(
-            event_loop
-                .create_window(window_attributes)
-                .expect("window should be created"),
-        );
+        let mut limiter = FrameLimiter::new(60);
+        let mut rendered_frames = 0;
+        let mut rendered_frames_tracker = Instant::now();
 
-        // Initialize the renderer, passing it the channel receiver.
-        // The channel is used for other components to send updates directly to the renderer,
-        // ex. an entity was added to the world to be rendered, an asset was registered, etc.
-        let (renderer_tx, renderer_rx) = mpsc::channel::<RendererEvent>();
-        let renderer = futures::executor::block_on(Renderer::new(window.clone(), renderer_rx));
+        loop {
+            if limiter.ready_for_next_frame() {
+                let assets = self.world.assets();
+                let mut items = Vec::new();
 
-        // Start a new thread for the renderer.
-        // NOTE: creating the renderer must be done on the main thread.
-        std::thread::spawn(move || renderer.run());
+                // TODO: this renders all registered bitmaps, we probably need some "should_render/hidden" flag.
+                for bitmap in assets.get_bitmaps().iter() {
+                    items.push(RenderItem::Bitmap(BitmapRenderItem {
+                        name: bitmap.to_string(),
+                    }));
+                }
 
-        Self {
-            window,
-            renderer_tx,
-            world: World::new(),
-            scene: Box::new(LoginScene::default()),
+                if let Err(e) = self.renderer_tx.send(RendererEvent::Render(items)) {
+                    log::error!("Error sending render event: {}", e);
+                }
+
+                limiter.last_frame_start = Instant::now();
+                rendered_frames += 1;
+            }
+
+            // hmm we are only getting 50fps...
+            if rendered_frames_tracker.elapsed() >= Duration::from_secs(1) {
+                log::info!("rendered {} frames!", rendered_frames);
+                rendered_frames = 0;
+                rendered_frames_tracker = Instant::now();
+            }
+
+            // TODO: we should figure out the right sleep here based on frame rate.
+            // Not sleeping causes 100% cpu usage.
+            // thread::sleep(limiter.tick_duration);
         }
     }
 
@@ -100,15 +121,51 @@ impl Cedar {
     }
 }
 
-impl ApplicationHandler for CedarState {
+impl ApplicationHandler for WindowState {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         match self {
-            CedarState::Uninitialized => {
-                let mut cedar = Cedar::new(event_loop);
-                cedar.init();
-                *self = CedarState::Initialized(cedar);
+            WindowState::Uninitialized => {
+                let window_attributes = Window::default_attributes()
+                    .with_title("CedarMS")
+                    .with_inner_size(LogicalSize::new(800, 600));
+
+                let window = Arc::new(
+                    event_loop
+                        .create_window(window_attributes)
+                        .expect("window should be created"),
+                );
+
+                // Initialize the renderer passing it the event receiver.
+                // The channel is used for other components to send updates directly to the renderer,
+                // ex. an entity was added to the world to be rendered, an asset was registered, etc.
+                let (renderer_tx, renderer_rx) = mpsc::channel::<RendererEvent>();
+                let renderer =
+                    futures::executor::block_on(Renderer::new(window.clone(), renderer_rx));
+
+                // Start a new thread for the renderer.
+                // NOTE: creating the renderer must be done on the main thread.
+                thread::spawn(move || renderer.run());
+
+                let (window_tx, window_rx) = mpsc::channel::<WindowEvent>();
+
+                // Create and run the main game loop.
+                thread::spawn(move || {
+                    // TODO: maybe Cedar::run() makes more sense.
+                    let cedar = Cedar {
+                        window: window.clone(),
+                        world: World::new(),
+                        scene: Box::new(LoginScene::default()),
+                        renderer_tx,
+                        window_rx: window_rx,
+                    };
+
+                    cedar.run();
+                });
+
+                let handler = WindowEventHandler { sender: window_tx };
+                *self = WindowState::Initialized(handler);
             }
-            CedarState::Initialized(_) => return,
+            WindowState::Initialized(_) => return,
         }
     }
 
@@ -116,49 +173,34 @@ impl ApplicationHandler for CedarState {
         &mut self,
         event_loop: &ActiveEventLoop,
         _window_id: WindowId,
-        event: WindowEvent,
+        event: WinitWindowEvent,
     ) {
-        let cedar = match self {
-            CedarState::Uninitialized => return,
-            CedarState::Initialized(app) => app,
+        let handler = match self {
+            WindowState::Uninitialized => return,
+            WindowState::Initialized(handler) => handler,
         };
 
         match event {
-            WindowEvent::CloseRequested => {
+            WinitWindowEvent::CloseRequested => {
                 event_loop.exit();
             }
-            // FIXME: this sends way too many updates and floods the channel.
-            // Need to keep track of time here.
-            WindowEvent::RedrawRequested => {
-                cedar.window.request_redraw();
-
-                let assets = cedar.world.assets();
-                let mut items = Vec::new();
-
-                // TODO: this renders all registered bitmaps, we probably need some "should_render/hidden" flag.
-                for bitmap in assets.get_bitmaps().iter() {
-                    items.push(RenderItem::Bitmap(BitmapRenderItem {
-                        name: bitmap.to_string(),
-                    }));
+            e => {
+                // I'm pretty sure we can't send the WinitWindowEvent directly, should confirm this.
+                if let Err(e) = handler.sender.send(WindowEvent(e)) {
+                    log::error!("Error sending window event: {}", e);
                 }
+            } /*
+              WindowEvent::Resized(new_size) => {
+                  cedar
+                      .renderer_tx
+                      .send(RendererEvent::Resize(new_size))
+                      .unwrap();
 
-                cedar
-                    .renderer_tx
-                    .send(RendererEvent::Render(items))
-                    .unwrap();
-            }
-            WindowEvent::Resized(new_size) => {
-                cedar
-                    .renderer_tx
-                    .send(RendererEvent::Resize(new_size))
-                    .unwrap();
-
-                cedar
-                    .world
-                    .window()
-                    .resize(new_size, cedar.window.scale_factor());
-            }
-            _ => (),
+                  cedar
+                      .world
+                      .window()
+                      .resize(new_size, cedar.window.scale_factor());
+              }*/
         }
     }
 }
@@ -169,9 +211,29 @@ fn main() {
         .init();
 
     let event_loop = EventLoop::new().expect("event loop should be created");
-    event_loop.set_control_flow(ControlFlow::Poll);
+    event_loop.set_control_flow(ControlFlow::Wait);
 
     event_loop
-        .run_app(&mut CedarState::Uninitialized)
+        .run_app(&mut WindowState::Uninitialized)
         .expect("event loop should run");
+}
+
+struct FrameLimiter {
+    tick_duration: Duration,
+    target_frame_duration: Duration,
+    last_frame_start: Instant,
+}
+
+impl FrameLimiter {
+    pub fn new(target_fps: u32) -> Self {
+        Self {
+            tick_duration: Duration::from_secs(1) / 120,
+            target_frame_duration: Duration::from_secs(1) / target_fps,
+            last_frame_start: Instant::now(),
+        }
+    }
+
+    pub fn ready_for_next_frame(&self) -> bool {
+        Instant::now() - self.last_frame_start > self.target_frame_duration
+    }
 }
