@@ -1,15 +1,19 @@
 use std::{
     collections::HashMap,
     iter,
+    ops::Range,
     sync::{mpsc, Arc},
 };
 
+use hecs::Entity;
 use nx_pkg4::NxBitmap;
+use wgpu::util::DeviceExt;
 use winit::{dpi::PhysicalSize, window::Window};
 
-use super::{BitmapRenderItem, RenderItem};
+use super::{sprite::Renderable, Sprite};
 
 pub struct Renderer {
+    window: Arc<Window>,
     receiver: mpsc::Receiver<RendererEvent>,
 
     surface: wgpu::Surface<'static>,
@@ -18,14 +22,12 @@ pub struct Renderer {
     pub(crate) config: wgpu::SurfaceConfiguration,
     pub(crate) texture_bind_group_layout: wgpu::BindGroupLayout,
 
-    // A map of `RenderItem` type names to render pipelines.
+    // A map of `Renderable` type names to render pipelines.
     pub(crate) render_pipelines: HashMap<String, wgpu::RenderPipeline>,
-    pub(crate) vertex_buffers: HashMap<String, wgpu::Buffer>,
-    pub(crate) index_buffers: HashMap<String, wgpu::Buffer>,
+    pub(crate) vertex_buffers: HashMap<Entity, wgpu::Buffer>,
+    pub(crate) index_buffers: HashMap<Entity, wgpu::Buffer>,
 
-    // TODO: we might want to make this a HashMap<String, HashMap<String, (BindGroup, Texture)>>
-    // and separate by render item type to ensure no collisions?
-    bitmap_bind_groups: HashMap<String, (wgpu::BindGroup, wgpu::Texture)>,
+    texture_bind_groups: HashMap<String, (wgpu::BindGroup, wgpu::Texture)>,
 }
 
 impl Renderer {
@@ -34,7 +36,7 @@ impl Renderer {
 
         let window_size = window.inner_size();
         let surface = instance
-            .create_surface(window)
+            .create_surface(window.clone())
             .expect("surface should be created");
 
         let adapter = instance
@@ -88,7 +90,8 @@ impl Renderer {
                 label: None,
             });
 
-        let mut renderer = Self {
+        Self {
+            window,
             receiver,
             surface,
             device,
@@ -98,30 +101,26 @@ impl Renderer {
             render_pipelines: HashMap::new(),
             vertex_buffers: HashMap::new(),
             index_buffers: HashMap::new(),
-            bitmap_bind_groups: HashMap::new(),
-        };
-
-        // TODO: fix this weirdness.
-        BitmapRenderItem::create_renderer_components(&mut renderer);
-        renderer
+            texture_bind_groups: HashMap::new(),
+        }
     }
 
     pub fn run(mut self) {
+        self.register_render_pipeline::<Sprite>();
+
         loop {
             if let Ok(event) = self.receiver.recv() {
-                // TODO: we might want to process all updates other than Render first,
-                // then process render updates.
-                // Its probably possible for something to start rendering before we have
-                // had the chance to create the bind groups for it, etc.
                 match event {
                     RendererEvent::RegisterBitmap(name, bitmap) => {
                         self.register_bitmap(&name, bitmap)
                     }
-                    RendererEvent::Render(items) => {
+                    RendererEvent::Render(updates, items) => {
+                        self.process_updates(updates);
+
                         match self.render(items) {
                             Ok(_) => {}
                             Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
-                                // self.resize(self.window.inner_size());
+                                self.resize(self.window.inner_size());
                             }
                             Err(wgpu::SurfaceError::OutOfMemory) => {
                                 log::error!("System is out of memory, exiting");
@@ -139,7 +138,36 @@ impl Renderer {
         }
     }
 
-    pub fn render(&mut self, mut items: Vec<RenderItem>) -> Result<(), wgpu::SurfaceError> {
+    fn process_updates(&mut self, mut updates: Vec<RenderUpdate>) {
+        while let Some(update) = updates.pop() {
+            match update {
+                RenderUpdate::CreateIndexBuffer { entity, data } => {
+                    self.index_buffers.insert(
+                        entity,
+                        self.device
+                            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                                label: None,
+                                contents: &data,
+                                usage: wgpu::BufferUsages::INDEX,
+                            }),
+                    );
+                }
+                RenderUpdate::CreateVertexBuffer { entity, data } => {
+                    self.vertex_buffers.insert(
+                        entity,
+                        self.device
+                            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                                label: None,
+                                contents: &data,
+                                usage: wgpu::BufferUsages::VERTEX,
+                            }),
+                    );
+                }
+            }
+        }
+    }
+
+    fn render(&mut self, mut items: Vec<RenderItem>) -> Result<(), wgpu::SurfaceError> {
         let frame = self.surface.get_current_texture()?;
         let view = frame
             .texture
@@ -156,9 +184,9 @@ impl Renderer {
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: 0.1,
-                        g: 0.2,
-                        b: 0.3,
+                        r: 1.0,
+                        g: 1.0,
+                        b: 1.0,
                         a: 1.0,
                     }),
                     store: wgpu::StoreOp::Store,
@@ -172,28 +200,24 @@ impl Renderer {
         // Process each render item one by one.
         while let Some(item) = items.pop() {
             // Set the pipeline for the item type.
-            let render_pipeline = self.render_pipelines.get(item.get_type_name()).unwrap();
+            let render_pipeline = self.render_pipelines.get(&item.type_name).unwrap();
             render_pass.set_pipeline(render_pipeline);
 
-            // Set the vertex buffer for the item type.
-            let vertex_buffer = self.vertex_buffers.get(item.get_type_name()).unwrap();
+            // Set the vertex buffer for the item's entity.
+            let vertex_buffer = self.vertex_buffers.get(&item.entity).unwrap();
             render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
 
-            // Set the index buffer for the item type.
-            let index_buffer = self.index_buffers.get(item.get_type_name()).unwrap();
+            // Set the index buffer for the item's entity.
+            let index_buffer = self.index_buffers.get(&item.entity).unwrap();
             render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
 
-            // Get the bind group for the item type.
-            let range = match item {
-                RenderItem::Bitmap(bitmap_item) => {
-                    let bind_group = self.bitmap_bind_groups.get(&bitmap_item.name).unwrap();
-                    render_pass.set_bind_group(0, &bind_group.0, &[]);
-                    0..6
-                }
-            };
+            // Set the bind group for the item's texture (if applicable).
+            if let Some(texture_name) = item.texture_name {
+                let bind_group = self.texture_bind_groups.get(&texture_name).unwrap();
+                render_pass.set_bind_group(0, &bind_group.0, &[]);
+            }
 
-            // TODO: not exactly sure what range is, looks like the # of indices - can we just do index buffer.len()?
-            render_pass.draw_indexed(range, 0, 0..1);
+            render_pass.draw_indexed(item.range, 0, 0..1);
         }
 
         drop(render_pass);
@@ -213,11 +237,17 @@ impl Renderer {
         }
     }
 
-    pub fn register_bitmap(&mut self, name: &str, bitmap: NxBitmap) {
-        if self.bitmap_bind_groups.contains_key(name) {
-            return;
-        }
+    pub fn register_render_pipeline<T>(&mut self)
+    where
+        T: Renderable,
+    {
+        self.render_pipelines.insert(
+            std::any::type_name::<T>().to_string(),
+            T::create_render_pipeline(&self.device, &self.texture_bind_group_layout, &self.config),
+        );
+    }
 
+    pub fn register_bitmap(&mut self, name: &str, bitmap: NxBitmap) {
         let texture_size = wgpu::Extent3d {
             width: bitmap.width.into(),
             height: bitmap.height.into(),
@@ -258,6 +288,7 @@ impl Renderer {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
+            // TODO: play with these to see what looks best
             mag_filter: wgpu::FilterMode::Linear,
             min_filter: wgpu::FilterMode::Nearest,
             mipmap_filter: wgpu::FilterMode::Nearest,
@@ -279,13 +310,26 @@ impl Renderer {
             label: None,
         });
 
-        self.bitmap_bind_groups
+        self.texture_bind_groups
             .insert(name.to_string(), (texture_bind_group, texture));
     }
 }
 
 pub enum RendererEvent {
+    // TODO: not a fan of hard depending on NxBitmap, should probably wrap in our own Texture
     RegisterBitmap(String, NxBitmap),
-    Render(Vec<RenderItem>),
+    Render(Vec<RenderUpdate>, Vec<RenderItem>),
     Resize(PhysicalSize<u32>),
+}
+
+pub enum RenderUpdate {
+    CreateIndexBuffer { entity: Entity, data: Vec<u8> },
+    CreateVertexBuffer { entity: Entity, data: Vec<u8> },
+}
+
+pub struct RenderItem {
+    pub(crate) entity: Entity,
+    pub(crate) type_name: String,
+    pub(crate) texture_name: Option<String>,
+    pub(crate) range: Range<u32>,
 }

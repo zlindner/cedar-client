@@ -1,5 +1,6 @@
 pub use self::asset_manager::AssetManager;
+pub use self::asset_manager::NxFileType;
 pub use self::window_proxy::WindowProxy;
 
-pub mod asset_manager;
-pub mod window_proxy;
+mod asset_manager;
+mod window_proxy;

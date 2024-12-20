@@ -13,7 +13,7 @@ struct VertexOutput {
 fn vs_main(model: VertexInput) -> VertexOutput {
     var out: VertexOutput;
     out.tex_coords = model.tex_coords;
-    out.clip_position = vec4<f32>(model.position.x, model.position.y, 0.0, 0.5);
+    out.clip_position = vec4<f32>(model.position.x, model.position.y, 0.0, 1.0);
     return out;
 }
 

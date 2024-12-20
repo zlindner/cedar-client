@@ -6,18 +6,33 @@ use std::{
 };
 
 use downcast_rs::{impl_downcast, Downcast};
+use hecs::{DynamicBundle, Entity, Query, QueryBorrow, QueryMut, World};
 
 use crate::resource::{AssetManager, WindowProxy};
 
-pub struct World {
+pub struct State {
+    world: World,
     resources: HashMap<ResourceTypeId, RefCell<Box<dyn Resource>>>,
 }
 
-impl World {
+impl State {
     pub fn new() -> Self {
         Self {
+            world: World::new(),
             resources: HashMap::new(),
         }
+    }
+
+    pub fn spawn(&mut self, components: impl DynamicBundle) -> Entity {
+        self.world.spawn(components)
+    }
+
+    pub fn query<Q: Query>(&self) -> QueryBorrow<'_, Q> {
+        self.world.query::<Q>()
+    }
+
+    pub fn query_mut<Q: Query>(&mut self) -> QueryMut<'_, Q> {
+        self.world.query_mut::<Q>()
     }
 
     pub fn insert_resource<T: Resource>(&mut self, resource: T) {

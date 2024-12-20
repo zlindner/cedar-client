@@ -1,8 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    path::Path,
-    sync::mpsc,
-};
+use std::{collections::HashMap, path::Path, sync::mpsc};
 
 use nx_pkg4::{NxBitmap, NxFile, NxNode};
 
@@ -10,7 +6,7 @@ use crate::graphics::RendererEvent;
 
 pub struct AssetManager {
     nx: HashMap<NxFileType, NxFile>,
-    bitmaps: HashSet<String>,
+    bitmaps: Vec<String>,
 
     renderer_tx: mpsc::Sender<RendererEvent>,
 }
@@ -27,7 +23,7 @@ impl AssetManager {
 
         Self {
             nx,
-            bitmaps: HashSet::new(),
+            bitmaps: Vec::new(),
             renderer_tx,
         }
     }
@@ -36,20 +32,29 @@ impl AssetManager {
         self.nx.get(&file_type).unwrap().root()
     }
 
-    pub fn get_bitmaps(&self) -> &HashSet<String> {
+    pub fn get_bitmaps(&self) -> &Vec<String> {
         &self.bitmaps
     }
 
     pub fn register_bitmap(&mut self, name: &str, bitmap: NxBitmap) {
         // TODO: should log/handle case where bitmap is already registered.
+        let width = bitmap.width;
+        let height = bitmap.height;
 
-        self.bitmaps.insert(name.to_string());
+        self.bitmaps.push(name.to_string());
 
         if let Err(e) = self
             .renderer_tx
             .send(RendererEvent::RegisterBitmap(name.to_string(), bitmap))
         {
             log::error!("Error sending RegisterBitmap event: {}", e);
+        } else {
+            log::info!(
+                "Successfully registered bitmap {} width: {} height: {}",
+                name,
+                width,
+                height
+            );
         }
     }
 }

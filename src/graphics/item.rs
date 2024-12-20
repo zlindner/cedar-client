@@ -2,33 +2,25 @@ use wgpu::{include_wgsl, util::DeviceExt};
 
 use super::Renderer;
 
-pub enum RenderItem {
-    Bitmap(BitmapRenderItem),
-}
-
-impl RenderItem {
-    pub fn get_type_name(&self) -> &str {
-        match self {
-            RenderItem::Bitmap(_) => "bitmap",
-        }
-    }
-}
-
+// -1.0 + coord.x * 2.0 / screensize.x
+// 800, 600
+// x: 391, y: 330
+// w: 243, h: 132
 const BITMAP_VERTICES: &[Vertex] = &[
     Vertex {
-        position: [-0.5, -0.5, 0.0],
+        position: [-1.0, -1.0, 0.0],
         tex_coords: [0.0, 1.0],
     },
     Vertex {
-        position: [0.5, -0.5, 0.0],
+        position: [1.0, -1.0, 0.0],
         tex_coords: [1.0, 1.0],
     },
     Vertex {
-        position: [0.5, 0.5, 0.0],
+        position: [1.0, 1.0, 0.0],
         tex_coords: [1.0, 0.0],
     },
     Vertex {
-        position: [-0.5, 0.5, 0.0],
+        position: [-1.0, 1.0, 0.0],
         tex_coords: [0.0, 0.0],
     },
 ];
@@ -94,22 +86,6 @@ impl BitmapRenderItem {
                     multiview: None,
                     cache: None,
                 });
-
-        let vertex_buffer = renderer
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("bitmap vertex buffer"),
-                contents: bytemuck::cast_slice(BITMAP_VERTICES),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
-
-        let index_buffer = renderer
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("bitmap index buffer"),
-                contents: bytemuck::cast_slice(BITMAP_INDICES),
-                usage: wgpu::BufferUsages::INDEX,
-            });
 
         renderer
             .render_pipelines

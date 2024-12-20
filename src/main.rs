@@ -1,26 +1,25 @@
 use std::{
-    path::Path,
     sync::{mpsc, Arc},
     thread,
     time::{Duration, Instant},
 };
 
-use ecs::World;
-use graphics::{BitmapRenderItem, RenderItem, Renderer, RendererEvent};
+use graphics::{Renderer, RendererEvent, RendererManager};
 use resource::{AssetManager, WindowProxy};
 use scene::{LoginScene, Scene};
+use state::State;
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
     event::WindowEvent,
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
-    window::{Cursor, CustomCursor, Window, WindowId},
+    window::{Window, WindowId},
 };
 
-mod ecs;
 mod graphics;
 mod resource;
 mod scene;
+mod state;
 
 enum WindowState {
     Uninitialized,
@@ -33,7 +32,7 @@ struct WindowManager {
 
 struct Cedar {
     window: Arc<Window>,
-    world: World,
+    state: State,
     scene: Box<dyn Scene>,
     renderer_tx: mpsc::Sender<RendererEvent>,
     window_rx: mpsc::Receiver<WindowEvent>,
@@ -68,6 +67,8 @@ impl Cedar {
     fn run(mut self) {
         self.init();
 
+        let mut renderer_manager = RendererManager::new(self.renderer_tx.clone());
+
         let mut limiter = FrameLimiter::new(60);
         let mut rendered_frames = 0;
         let mut rendered_frames_tracker = Instant::now();
@@ -80,19 +81,7 @@ impl Cedar {
             }
 
             if limiter.ready_for_frame() {
-                let assets = self.world.assets();
-                let mut items = Vec::new();
-
-                // TODO: this renders all registered bitmaps, we probably need some "should_render/hidden" flag.
-                for bitmap in assets.get_bitmaps().iter() {
-                    items.push(RenderItem::Bitmap(BitmapRenderItem {
-                        name: bitmap.to_string(),
-                    }));
-                }
-
-                if let Err(e) = self.renderer_tx.send(RendererEvent::Render(items)) {
-                    log::error!("Error sending Render event: {}", e);
-                }
+                renderer_manager.generate_and_send_events(&mut self.state);
 
                 limiter.last_frame_start = Instant::now();
                 rendered_frames += 1;
@@ -112,15 +101,15 @@ impl Cedar {
     }
 
     fn init(&mut self) {
-        // Add default resources to the world.
-        self.world
+        // Add default resources to the state.
+        self.state
             .insert_resource(AssetManager::new(self.renderer_tx.clone()));
-        self.world.insert_resource(WindowProxy::new(
+        self.state.insert_resource(WindowProxy::new(
             self.window.inner_size(),
             self.window.scale_factor(),
         ));
 
-        self.scene.init(&mut self.world);
+        self.scene.init(&mut self.state);
     }
 
     /// Handle any events sent from the ui thread.
@@ -133,7 +122,7 @@ impl Cedar {
                         log::error!("Error sending resize event to renderer: {}", e);
                     }
 
-                    self.world
+                    self.state
                         .window()
                         .resize(new_size, self.window.scale_factor());
                 }
@@ -175,7 +164,7 @@ impl ApplicationHandler for WindowState {
                     // TODO: maybe Cedar::run() makes more sense.
                     let cedar = Cedar {
                         window: window.clone(),
-                        world: World::new(),
+                        state: State::new(),
                         scene: Box::new(LoginScene::default()),
                         renderer_tx,
                         window_rx: window_rx,
