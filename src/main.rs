@@ -102,8 +102,7 @@ impl Cedar {
 
     fn init(&mut self) {
         // Add default resources to the state.
-        self.state
-            .insert_resource(AssetManager::new(self.renderer_tx.clone()));
+        self.state.insert_resource(AssetManager::new());
         self.state.insert_resource(WindowProxy::new(
             self.window.inner_size(),
             self.window.scale_factor(),

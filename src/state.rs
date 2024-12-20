@@ -59,11 +59,6 @@ impl State {
             .expect("AssetManager should exist")
     }
 
-    pub fn assets_mut(&self) -> RefMut<AssetManager> {
-        self.get_resource_mut::<AssetManager>()
-            .expect("AssetManager should exist")
-    }
-
     pub fn window(&self) -> RefMut<WindowProxy> {
         self.get_resource_mut::<WindowProxy>()
             .expect("WindowProxy should exist")

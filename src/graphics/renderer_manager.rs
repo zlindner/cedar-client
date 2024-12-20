@@ -26,7 +26,15 @@ impl RendererManager {
     fn get_render_updates(&mut self, state: &mut State) -> Vec<RenderUpdate> {
         let mut updates = Vec::new();
 
-        for (entity, sprite) in state.query_mut::<&mut Sprite>() {
+        // TODO: I'm not sure this is actually needed, can we not just compute this once
+        // in Sprite::new()?
+        // This might be useful ex. if a character changes equipment?
+        for (entity, (sprite)) in state.query::<&Sprite>().iter() {
+            let mut sprite = sprite.clone();
+
+            let assets = state.assets();
+            let bitmap = assets.get_bitmap(&sprite.bitmap_path).unwrap();
+
             updates.push(RenderUpdate::CreateIndexBuffer {
                 entity,
                 data: sprite.get_index_buffer().to_vec(),
@@ -34,7 +42,13 @@ impl RendererManager {
 
             updates.push(RenderUpdate::CreateVertexBuffer {
                 entity,
-                data: sprite.get_vertex_buffer().to_vec(),
+                data: sprite.get_vertex_buffer(&bitmap).to_vec(),
+            });
+
+            // We need to push the bind group update last since it consumes the bitmap.
+            updates.push(RenderUpdate::CreateTextureBindGroup {
+                bitmap_path: sprite.bitmap_path.clone(),
+                bitmap,
             });
         }
 
@@ -45,12 +59,12 @@ impl RendererManager {
         let mut items = Vec::new();
 
         for (entity, sprite) in state.query_mut::<&mut Sprite>() {
-            let s = sprite.clone();
+            let sprite = sprite.clone();
 
             items.push(RenderItem {
                 entity,
                 type_name: std::any::type_name::<Sprite>().to_string(),
-                texture_name: Some(s.texture_path),
+                texture_name: Some(sprite.bitmap_path.clone()),
                 range: sprite.index_buffer_range(),
             });
         }

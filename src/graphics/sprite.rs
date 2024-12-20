@@ -1,5 +1,6 @@
 use std::ops::Range;
 
+use nx_pkg4::NxBitmap;
 use wgpu::include_wgsl;
 
 use super::Vertex;
@@ -8,19 +9,25 @@ const INDICES: &[u16] = &[0, 1, 2, 2, 3, 0];
 
 #[derive(Clone)]
 pub struct Sprite {
-    pub texture_path: String,
+    pub bitmap_path: String,
     vertices: Option<[Vertex; 4]>,
+    pub initialized: bool,
 }
 
 impl Sprite {
-    pub fn new(texture_path: String) -> Self {
+    pub fn new(bitmap_path: &str) -> Self {
         Self {
-            texture_path,
+            bitmap_path: bitmap_path.to_string(),
             vertices: None,
+            initialized: false,
         }
     }
 
-    fn compute_vertices(&self) -> [Vertex; 4] {
+    // -1.0 + coord.x * 2.0 / screensize.x
+    // 800, 600
+    // x: 391, y: 330
+    // w: 243, h: 132
+    fn compute_vertices(&self, bitmap: &NxBitmap) -> [Vertex; 4] {
         [
             Vertex {
                 position: [-1.0, -1.0, 0.0],
@@ -49,7 +56,7 @@ pub trait Renderable {
         config: &wgpu::SurfaceConfiguration,
     ) -> wgpu::RenderPipeline;
 
-    fn get_vertex_buffer(&mut self) -> &[u8];
+    fn get_vertex_buffer(&mut self, bitmap: &NxBitmap) -> &[u8];
 
     fn get_index_buffer(&self) -> &[u8];
 
@@ -110,9 +117,9 @@ impl Renderable for Sprite {
         })
     }
 
-    fn get_vertex_buffer(&mut self) -> &[u8] {
+    fn get_vertex_buffer(&mut self, bitmap: &NxBitmap) -> &[u8] {
         if self.vertices.is_none() {
-            self.vertices = Some(self.compute_vertices());
+            self.vertices = Some(self.compute_vertices(bitmap));
         }
 
         bytemuck::cast_slice(self.vertices.as_ref().unwrap())

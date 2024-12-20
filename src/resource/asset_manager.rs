@@ -1,66 +1,51 @@
-use std::{collections::HashMap, path::Path, sync::mpsc};
+use std::{collections::HashMap, path::Path};
 
-use nx_pkg4::{NxBitmap, NxFile, NxNode};
-
-use crate::graphics::RendererEvent;
+use nx_pkg4::{Node, NxBitmap, NxFile};
 
 pub struct AssetManager {
-    nx: HashMap<NxFileType, NxFile>,
-    bitmaps: Vec<String>,
-
-    renderer_tx: mpsc::Sender<RendererEvent>,
+    nx: HashMap<String, NxFile>,
 }
 
 impl AssetManager {
-    pub fn new(renderer_tx: mpsc::Sender<RendererEvent>) -> Self {
+    pub fn new() -> Self {
         let mut nx = HashMap::new();
 
         nx.insert(
-            NxFileType::Map001,
+            "Map001.nx".to_string(),
             NxFile::open(Path::new("nx/Map001.nx")).unwrap(),
         );
-        nx.insert(NxFileType::Ui, NxFile::open(Path::new("nx/UI.nx")).unwrap());
+        nx.insert(
+            "UI.nx".to_string(),
+            NxFile::open(Path::new("nx/UI.nx")).unwrap(),
+        );
 
-        Self {
-            nx,
-            bitmaps: Vec::new(),
-            renderer_tx,
+        Self { nx }
+    }
+
+    pub fn get_bitmap(&self, path: &str) -> Option<NxBitmap> {
+        let (file_name, path) = path.split_at(path.find("/").unwrap());
+
+        let file = match self.nx.get(file_name) {
+            Some(file) => file,
+            None => {
+                log::warn!("{} isn't open", file_name);
+                return None;
+            }
+        };
+
+        // Remove the leading slash.
+        let path = &path[1..path.len()];
+
+        match file.root().get(path).bitmap() {
+            Ok(Some(bitmap)) => Some(bitmap),
+            Ok(None) => {
+                log::error!("Bitmap not found {}", path);
+                None
+            }
+            Err(e) => {
+                log::error!("Error getting bitmap {}: {}", path, e);
+                None
+            }
         }
     }
-
-    pub fn nx(&self, file_type: &NxFileType) -> NxNode {
-        self.nx.get(&file_type).unwrap().root()
-    }
-
-    pub fn get_bitmaps(&self) -> &Vec<String> {
-        &self.bitmaps
-    }
-
-    pub fn register_bitmap(&mut self, name: &str, bitmap: NxBitmap) {
-        // TODO: should log/handle case where bitmap is already registered.
-        let width = bitmap.width;
-        let height = bitmap.height;
-
-        self.bitmaps.push(name.to_string());
-
-        if let Err(e) = self
-            .renderer_tx
-            .send(RendererEvent::RegisterBitmap(name.to_string(), bitmap))
-        {
-            log::error!("Error sending RegisterBitmap event: {}", e);
-        } else {
-            log::info!(
-                "Successfully registered bitmap {} width: {} height: {}",
-                name,
-                width,
-                height
-            );
-        }
-    }
-}
-
-#[derive(Hash, Eq, PartialEq)]
-pub enum NxFileType {
-    Map001,
-    Ui,
 }

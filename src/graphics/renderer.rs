@@ -111,9 +111,6 @@ impl Renderer {
         loop {
             if let Ok(event) = self.receiver.recv() {
                 match event {
-                    RendererEvent::RegisterBitmap(name, bitmap) => {
-                        self.register_bitmap(&name, bitmap)
-                    }
                     RendererEvent::Render(updates, items) => {
                         self.process_updates(updates);
 
@@ -141,6 +138,12 @@ impl Renderer {
     fn process_updates(&mut self, mut updates: Vec<RenderUpdate>) {
         while let Some(update) = updates.pop() {
             match update {
+                RenderUpdate::CreateTextureBindGroup {
+                    bitmap_path,
+                    bitmap,
+                } => {
+                    self.register_bitmap(bitmap_path, bitmap);
+                }
                 RenderUpdate::CreateIndexBuffer { entity, data } => {
                     self.index_buffers.insert(
                         entity,
@@ -247,7 +250,7 @@ impl Renderer {
         );
     }
 
-    pub fn register_bitmap(&mut self, name: &str, bitmap: NxBitmap) {
+    pub fn register_bitmap(&mut self, path: String, bitmap: NxBitmap) {
         let texture_size = wgpu::Extent3d {
             width: bitmap.width.into(),
             height: bitmap.height.into(),
@@ -262,7 +265,7 @@ impl Renderer {
             // NxBitmap data is in the "reversed" bgra format.
             format: wgpu::TextureFormat::Bgra8UnormSrgb,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            label: Some(name),
+            label: Some(&path),
             view_formats: &[],
         });
 
@@ -311,20 +314,28 @@ impl Renderer {
         });
 
         self.texture_bind_groups
-            .insert(name.to_string(), (texture_bind_group, texture));
+            .insert(path, (texture_bind_group, texture));
     }
 }
 
 pub enum RendererEvent {
-    // TODO: not a fan of hard depending on NxBitmap, should probably wrap in our own Texture
-    RegisterBitmap(String, NxBitmap),
     Render(Vec<RenderUpdate>, Vec<RenderItem>),
     Resize(PhysicalSize<u32>),
 }
 
 pub enum RenderUpdate {
-    CreateIndexBuffer { entity: Entity, data: Vec<u8> },
-    CreateVertexBuffer { entity: Entity, data: Vec<u8> },
+    CreateTextureBindGroup {
+        bitmap_path: String,
+        bitmap: NxBitmap,
+    },
+    CreateIndexBuffer {
+        entity: Entity,
+        data: Vec<u8>,
+    },
+    CreateVertexBuffer {
+        entity: Entity,
+        data: Vec<u8>,
+    },
 }
 
 pub struct RenderItem {
