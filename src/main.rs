@@ -4,6 +4,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use component::Camera;
 use graphics::{Renderer, RendererEvent, RendererManager};
 use resource::{AssetManager, WindowProxy};
 use scene::{LoginScene, Scene};
@@ -16,6 +17,7 @@ use winit::{
     window::{Window, WindowId},
 };
 
+mod component;
 mod graphics;
 mod resource;
 mod scene;
@@ -101,12 +103,15 @@ impl Cedar {
     }
 
     fn init(&mut self) {
-        // Add default resources to the state.
+        let window_size = self.window.inner_size();
+
         self.state.insert_resource(AssetManager::new());
-        self.state.insert_resource(WindowProxy::new(
-            self.window.inner_size(),
-            self.window.scale_factor(),
+        self.state.insert_resource(Camera::new(
+            window_size.width as f32,
+            window_size.height as f32,
         ));
+        self.state
+            .insert_resource(WindowProxy::new(window_size, self.window.scale_factor()));
 
         self.scene.init(&mut self.state);
     }

@@ -10,23 +10,26 @@ use nx_pkg4::NxBitmap;
 use wgpu::util::DeviceExt;
 use winit::{dpi::PhysicalSize, window::Window};
 
-use super::{sprite::Renderable, Sprite};
+use super::{sprite::Renderable, Sprite, Uniform};
 
 pub struct Renderer {
     window: Arc<Window>,
     receiver: mpsc::Receiver<RendererEvent>,
 
     surface: wgpu::Surface<'static>,
-    pub(crate) device: wgpu::Device,
+    device: wgpu::Device,
     queue: wgpu::Queue,
-    pub(crate) config: wgpu::SurfaceConfiguration,
-    pub(crate) texture_bind_group_layout: wgpu::BindGroupLayout,
+    config: wgpu::SurfaceConfiguration,
+
+    transform_bind_group_layout: wgpu::BindGroupLayout,
+    texture_bind_group_layout: wgpu::BindGroupLayout,
 
     // A map of `Renderable` type names to render pipelines.
-    pub(crate) render_pipelines: HashMap<String, wgpu::RenderPipeline>,
-    pub(crate) vertex_buffers: HashMap<Entity, wgpu::Buffer>,
-    pub(crate) index_buffers: HashMap<Entity, wgpu::Buffer>,
+    render_pipelines: HashMap<String, wgpu::RenderPipeline>,
+    vertex_buffers: HashMap<Entity, wgpu::Buffer>,
+    index_buffers: HashMap<Entity, wgpu::Buffer>,
 
+    transform_bind_groups: HashMap<Entity, (wgpu::BindGroup)>,
     texture_bind_groups: HashMap<String, (wgpu::BindGroup, wgpu::Texture)>,
 }
 
@@ -67,6 +70,21 @@ impl Renderer {
 
         surface.configure(&device, &config);
 
+        let transform_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+                label: None,
+            });
+
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 entries: &[
@@ -97,10 +115,12 @@ impl Renderer {
             device,
             queue,
             config,
+            transform_bind_group_layout,
             texture_bind_group_layout,
             render_pipelines: HashMap::new(),
             vertex_buffers: HashMap::new(),
             index_buffers: HashMap::new(),
+            transform_bind_groups: HashMap::new(),
             texture_bind_groups: HashMap::new(),
         }
     }
@@ -166,6 +186,31 @@ impl Renderer {
                             }),
                     );
                 }
+                RenderUpdate::UpdateTransformUniform { entity, uniform } => {
+                    let uniform_buffer =
+                        self.device
+                            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                                label: None,
+                                contents: bytemuck::cast_slice(&[uniform]),
+                                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                            });
+
+                    let uniform_bind_group =
+                        self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                            layout: &self.transform_bind_group_layout,
+                            entries: &[wgpu::BindGroupEntry {
+                                binding: 0,
+                                resource: uniform_buffer.as_entire_binding(),
+                            }],
+                            label: Some("uniform_bind_group"),
+                        });
+
+                    self.transform_bind_groups
+                        .insert(entity, uniform_bind_group);
+
+                    self.queue
+                        .write_buffer(&uniform_buffer, 0, bytemuck::cast_slice(&[uniform]));
+                }
             }
         }
     }
@@ -214,10 +259,13 @@ impl Renderer {
             let index_buffer = self.index_buffers.get(&item.entity).unwrap();
             render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
 
+            let transform_bind_group = self.transform_bind_groups.get(&item.entity).unwrap();
+            render_pass.set_bind_group(0, transform_bind_group, &[]);
+
             // Set the bind group for the item's texture (if applicable).
             if let Some(texture_name) = item.texture_name {
-                let bind_group = self.texture_bind_groups.get(&texture_name).unwrap();
-                render_pass.set_bind_group(0, &bind_group.0, &[]);
+                let texture_bind_group = self.texture_bind_groups.get(&texture_name).unwrap();
+                render_pass.set_bind_group(1, &texture_bind_group.0, &[]);
             }
 
             render_pass.draw_indexed(item.range, 0, 0..1);
@@ -246,7 +294,12 @@ impl Renderer {
     {
         self.render_pipelines.insert(
             std::any::type_name::<T>().to_string(),
-            T::create_render_pipeline(&self.device, &self.texture_bind_group_layout, &self.config),
+            T::create_render_pipeline(
+                &self.device,
+                &self.transform_bind_group_layout,
+                &self.texture_bind_group_layout,
+                &self.config,
+            ),
         );
     }
 
@@ -335,6 +388,10 @@ pub enum RenderUpdate {
     CreateVertexBuffer {
         entity: Entity,
         data: Vec<u8>,
+    },
+    UpdateTransformUniform {
+        entity: Entity,
+        uniform: Uniform,
     },
 }
 

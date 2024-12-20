@@ -5,13 +5,12 @@ use wgpu::include_wgsl;
 
 use super::Vertex;
 
-const INDICES: &[u16] = &[0, 1, 2, 2, 3, 0];
+const INDICES: &[u16] = &[0, 1, 3, 3, 1, 2];
 
 #[derive(Clone)]
 pub struct Sprite {
     pub bitmap_path: String,
     vertices: Option<[Vertex; 4]>,
-    pub initialized: bool,
 }
 
 impl Sprite {
@@ -19,31 +18,29 @@ impl Sprite {
         Self {
             bitmap_path: bitmap_path.to_string(),
             vertices: None,
-            initialized: false,
         }
     }
 
-    // -1.0 + coord.x * 2.0 / screensize.x
-    // 800, 600
-    // x: 391, y: 330
-    // w: 243, h: 132
     fn compute_vertices(&self, bitmap: &NxBitmap) -> [Vertex; 4] {
+        let width = bitmap.width.into();
+        let height = bitmap.height.into();
+
         [
             Vertex {
-                position: [-1.0, -1.0, 0.0],
+                position: [0.0, 0.0, 0.0],
+                tex_coords: [0.0, 0.0],
+            },
+            Vertex {
+                position: [0.0, height, 0.0],
                 tex_coords: [0.0, 1.0],
             },
             Vertex {
-                position: [1.0, -1.0, 0.0],
+                position: [width, height, 0.0],
                 tex_coords: [1.0, 1.0],
             },
             Vertex {
-                position: [1.0, 1.0, 0.0],
+                position: [width, 0.0, 0.0],
                 tex_coords: [1.0, 0.0],
-            },
-            Vertex {
-                position: [-1.0, 1.0, 0.0],
-                tex_coords: [0.0, 0.0],
             },
         ]
     }
@@ -52,7 +49,8 @@ impl Sprite {
 pub trait Renderable {
     fn create_render_pipeline(
         device: &wgpu::Device,
-        bind_group_layout: &wgpu::BindGroupLayout,
+        transform_bind_group_layout: &wgpu::BindGroupLayout,
+        texture_bind_group_layout: &wgpu::BindGroupLayout,
         config: &wgpu::SurfaceConfiguration,
     ) -> wgpu::RenderPipeline;
 
@@ -66,17 +64,18 @@ pub trait Renderable {
 impl Renderable for Sprite {
     fn create_render_pipeline(
         device: &wgpu::Device,
-        bind_group_layout: &wgpu::BindGroupLayout,
+        transform_bind_group_layout: &wgpu::BindGroupLayout,
+        texture_bind_group_layout: &wgpu::BindGroupLayout,
         config: &wgpu::SurfaceConfiguration,
     ) -> wgpu::RenderPipeline {
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("bitmap render pipeline layout"),
-                bind_group_layouts: &[bind_group_layout],
+                bind_group_layouts: &[transform_bind_group_layout, texture_bind_group_layout],
                 push_constant_ranges: &[],
             });
 
-        let shader = device.create_shader_module(include_wgsl!("shaders/bitmap.wgsl"));
+        let shader = device.create_shader_module(include_wgsl!("shaders/sprite.wgsl"));
 
         device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("bitmap render pipeline"),
