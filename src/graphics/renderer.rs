@@ -399,5 +399,6 @@ pub struct RenderItem {
     pub(crate) entity: Entity,
     pub(crate) type_name: String,
     pub(crate) texture_name: Option<String>,
+    pub(crate) layer: usize,
     pub(crate) range: Range<u32>,
 }

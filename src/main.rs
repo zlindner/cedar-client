@@ -103,15 +103,20 @@ impl Cedar {
     }
 
     fn init(&mut self) {
-        let window_size = self.window.inner_size();
+        let logical_window_size = self
+            .window
+            .inner_size()
+            .to_logical(self.window.scale_factor());
 
         self.state.insert_resource(AssetManager::new());
         self.state.insert_resource(Camera::new(
-            window_size.width as f32,
-            window_size.height as f32,
+            logical_window_size.width,
+            logical_window_size.height,
         ));
-        self.state
-            .insert_resource(WindowProxy::new(window_size, self.window.scale_factor()));
+        self.state.insert_resource(WindowProxy::new(
+            self.window.inner_size(),
+            self.window.scale_factor(),
+        ));
 
         self.scene.init(&mut self.state);
     }

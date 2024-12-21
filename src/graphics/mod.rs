@@ -65,7 +65,6 @@ impl Uniform {
 
         // TODO rotation?
 
-        let camera = Camera::new(800.0, 600.0);
         let camera_view = ultraviolet::projection::lh_ydown::orthographic_wgpu_dx(
             camera.left,
             camera.right,

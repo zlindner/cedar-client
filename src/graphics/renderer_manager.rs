@@ -87,15 +87,19 @@ impl RendererManager {
     fn get_render_items(&mut self, state: &mut State) -> Vec<RenderItem> {
         let mut items = Vec::new();
 
-        for (entity, sprite) in state.query::<&Sprite>().iter() {
+        for (entity, (sprite, transform)) in state.query::<(&Sprite, &Transform)>().iter() {
             items.push(RenderItem {
                 entity,
                 type_name: std::any::type_name::<Sprite>().to_string(),
                 texture_name: Some(sprite.bitmap_path.clone()),
                 range: sprite.index_buffer_range(),
+                layer: transform.z as usize,
             });
         }
 
+        // Sort render items by their z position/layer.
+        // High layer = front, low layer = back.
+        items.sort_by(|a, b| b.layer.cmp(&a.layer));
         items
     }
 }
