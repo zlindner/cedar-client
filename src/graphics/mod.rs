@@ -4,6 +4,7 @@ use ultraviolet::Vec3;
 use ultraviolet::Vec4;
 
 use crate::component::Camera;
+use crate::component::Texture;
 use crate::component::Transform;
 
 pub use self::renderer::RenderItem;
@@ -54,9 +55,18 @@ pub struct Uniform {
 }
 
 impl Uniform {
-    pub fn compute(transform: &Transform, camera: &Camera) -> Self {
+    pub fn compute(transform: &Transform, camera: &Camera, texture: &Texture) -> Self {
         let mut model_transform = Similarity3::identity();
         model_transform.prepend_scaling(transform.scale);
+
+        if let Some((x, y)) = texture.origin {
+            model_transform.append_translation(Vec3 {
+                x: -x as f32,
+                y: -y as f32,
+                z: 0.0,
+            });
+        }
+
         model_transform.append_translation(Vec3 {
             x: transform.x * transform.scale,
             y: transform.y * transform.scale,

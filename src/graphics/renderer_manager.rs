@@ -44,12 +44,17 @@ impl RendererManager {
         for (entity, (sprite, transform)) in state.query::<(&Sprite, &Transform)>().iter() {
             let mut sprite = sprite.clone();
 
+            // TODO: it seems like getting the bitmap is very slow, might need to cache.
+            // we might also want to move bitmap loading to the rendering thread.
+            let assets = state.assets();
+            let texture = assets.get_texture(&sprite.texture_path).unwrap();
+            // log::info!("{}: {:?}", &sprite.texture_path, texture);
+
+            // FIXME: this updates the transform uniforms regardless if sprite/camera doesn't move.
+            let uniform = Uniform::compute(transform, &camera, &texture);
+            updates.push(RenderUpdate::UpdateTransformUniform { entity, uniform });
+
             if !self.initialized_entities.contains(&entity) {
-                let assets = state.assets();
-
-                // TODO: it seems like getting the bitmap is very slow, might need to cache.
-                let bitmap = assets.get_bitmap(&sprite.bitmap_path).unwrap();
-
                 updates.push(RenderUpdate::CreateIndexBuffer {
                     entity,
                     data: sprite.get_index_buffer().to_vec(),
@@ -57,28 +62,21 @@ impl RendererManager {
 
                 updates.push(RenderUpdate::CreateVertexBuffer {
                     entity,
-                    data: sprite.get_vertex_buffer(&bitmap).to_vec(),
+                    data: sprite.get_vertex_buffer(&texture).to_vec(),
                 });
 
                 self.initialized_entities.insert(entity);
             }
 
-            if !self.initialized_bitmaps.contains(&sprite.bitmap_path) {
-                let assets = state.assets();
-                let bitmap = assets.get_bitmap(&sprite.bitmap_path).unwrap();
-
+            if !self.initialized_bitmaps.contains(&sprite.texture_path) {
                 // We need to push the bind group update last since it consumes the bitmap.
                 updates.push(RenderUpdate::CreateTextureBindGroup {
-                    bitmap_path: sprite.bitmap_path.clone(),
-                    bitmap,
+                    texture_path: sprite.texture_path.clone(),
+                    texture,
                 });
 
-                self.initialized_bitmaps.insert(sprite.bitmap_path.clone());
+                self.initialized_bitmaps.insert(sprite.texture_path.clone());
             }
-
-            // FIXME: this updates the transform uniforms regardless if sprite/camera doesn't move.
-            let uniform = Uniform::compute(transform, &camera);
-            updates.push(RenderUpdate::UpdateTransformUniform { entity, uniform });
         }
 
         updates
@@ -91,7 +89,7 @@ impl RendererManager {
             items.push(RenderItem {
                 entity,
                 type_name: std::any::type_name::<Sprite>().to_string(),
-                texture_name: Some(sprite.bitmap_path.clone()),
+                texture_name: Some(sprite.texture_path.clone()),
                 range: sprite.index_buffer_range(),
                 layer: transform.z as usize,
             });

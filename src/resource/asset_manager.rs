@@ -1,6 +1,8 @@
 use std::{collections::HashMap, path::Path};
 
-use nx_pkg4::{Node, NxBitmap, NxFile};
+use nx_pkg4::{Node, NxFile};
+
+use crate::component::Texture;
 
 pub struct AssetManager {
     nx: HashMap<String, NxFile>,
@@ -22,7 +24,8 @@ impl AssetManager {
         Self { nx }
     }
 
-    pub fn get_bitmap(&self, path: &str) -> Option<NxBitmap> {
+    pub fn get_texture(&self, path: &str) -> Option<Texture> {
+        log::info!("Getting texture for {}", path);
         let (file_name, path) = path.split_at(path.find("/").unwrap());
 
         let file = match self.nx.get(file_name) {
@@ -33,18 +36,22 @@ impl AssetManager {
             }
         };
 
-        // Remove the leading slash.
-        let path = &path[1..path.len()];
+        let root = file.root();
 
-        match file.root().get(path).bitmap() {
-            Ok(Some(bitmap)) => Some(bitmap),
-            Ok(None) => {
-                log::error!("Bitmap not found {}", path);
-                None
+        // Remove the leading slash from path.
+        let node = match root.get(&path[1..path.len()]) {
+            Some(node) => node,
+            None => {
+                log::error!("Texture not found {}", path);
+                return None;
             }
+        };
+
+        match Texture::load(node) {
+            Ok(texture) => texture,
             Err(e) => {
-                log::error!("Error getting bitmap {}: {}", path, e);
-                None
+                log::error!("Error getting texture {}: {}", path, e);
+                return None;
             }
         }
     }

@@ -3,7 +3,7 @@ use crate::{component::Transform, graphics::Sprite, state::State};
 // TODO: i think these bitmaps have some pivot info we need to consider.
 const BITMAPS: &[(&'static str, f32, f32, f32)] = &[
     // Main background
-    ("Map001.nx/Back/login.img/back/11", 0.0, 0.0, 1.0),
+    ("Map001.nx/Back/login.img/back/11", 400.0, 300.0, 1.0),
     // Login signboard
     ("UI.nx/Login.img/Title/signboard", 391.0, 330.0, 2.0),
     // Border around login screen
@@ -13,11 +13,11 @@ const BITMAPS: &[(&'static str, f32, f32, f32)] = &[
 ];
 
 pub trait Scene {
-    fn init(&mut self, world: &mut State) {}
+    fn init(&mut self, state: &mut State) {}
 }
 
 #[derive(Default)]
-pub struct LoginScene {}
+pub struct LoginScene;
 
 impl Scene for LoginScene {
     fn init(&mut self, state: &mut State) {

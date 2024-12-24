@@ -6,9 +6,10 @@ use std::{
 };
 
 use hecs::Entity;
-use nx_pkg4::NxBitmap;
 use wgpu::util::DeviceExt;
 use winit::{dpi::PhysicalSize, window::Window};
+
+use crate::component::Texture;
 
 use super::{sprite::Renderable, Sprite, Uniform};
 
@@ -159,10 +160,10 @@ impl Renderer {
         while let Some(update) = updates.pop() {
             match update {
                 RenderUpdate::CreateTextureBindGroup {
-                    bitmap_path,
-                    bitmap,
+                    texture_path,
+                    texture,
                 } => {
-                    self.register_bitmap(bitmap_path, bitmap);
+                    self.register_texture(texture_path, texture);
                 }
                 RenderUpdate::CreateIndexBuffer { entity, data } => {
                     self.index_buffers.insert(
@@ -303,14 +304,14 @@ impl Renderer {
         );
     }
 
-    pub fn register_bitmap(&mut self, path: String, bitmap: NxBitmap) {
+    pub fn register_texture(&mut self, path: String, texture: Texture) {
         let texture_size = wgpu::Extent3d {
-            width: bitmap.width.into(),
-            height: bitmap.height.into(),
+            width: texture.width,
+            height: texture.height,
             depth_or_array_layers: 1,
         };
 
-        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+        let wgpu_texture = self.device.create_texture(&wgpu::TextureDescriptor {
             size: texture_size,
             mip_level_count: 1,
             sample_count: 1,
@@ -324,12 +325,12 @@ impl Renderer {
 
         self.queue.write_texture(
             wgpu::ImageCopyTexture {
-                texture: &texture,
+                texture: &wgpu_texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
             },
-            &bitmap.data,
+            &texture.data,
             wgpu::ImageDataLayout {
                 offset: 0,
                 bytes_per_row: Some(4 * texture_size.width),
@@ -338,7 +339,7 @@ impl Renderer {
             texture_size,
         );
 
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let view = wgpu_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         let sampler = self.device.create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
@@ -367,7 +368,7 @@ impl Renderer {
         });
 
         self.texture_bind_groups
-            .insert(path, (texture_bind_group, texture));
+            .insert(path, (texture_bind_group, wgpu_texture));
     }
 }
 
@@ -378,8 +379,8 @@ pub enum RendererEvent {
 
 pub enum RenderUpdate {
     CreateTextureBindGroup {
-        bitmap_path: String,
-        bitmap: NxBitmap,
+        texture_path: String,
+        texture: Texture,
     },
     CreateIndexBuffer {
         entity: Entity,
