@@ -6,7 +6,7 @@ use std::{
 };
 
 use downcast_rs::{impl_downcast, Downcast};
-use hecs::{DynamicBundle, Entity, Query, QueryBorrow, QueryMut, QueryOne, World};
+use hecs::{DynamicBundle, Entity, Query, QueryBorrow, QueryMut, World};
 
 use crate::resource::{AssetManager, WindowProxy};
 

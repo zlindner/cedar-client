@@ -4,18 +4,28 @@ use ultraviolet::Vec3;
 use ultraviolet::Vec4;
 
 use crate::component::Camera;
-use crate::component::Texture;
 use crate::component::Transform;
 
+pub use self::button::Button;
 pub use self::renderer::RenderItem;
 pub use self::renderer::Renderer;
 pub use self::renderer::RendererEvent;
 pub use self::renderer_manager::RendererManager;
-pub use self::sprite::Sprite;
+pub use self::texture::Texture;
 
+mod button;
 mod renderer;
 mod renderer_manager;
-mod sprite;
+mod texture;
+
+pub trait Renderable {
+    fn create_render_pipeline(
+        device: &wgpu::Device,
+        transform_bind_group_layout: &wgpu::BindGroupLayout,
+        texture_bind_group_layout: &wgpu::BindGroupLayout,
+        config: &wgpu::SurfaceConfiguration,
+    ) -> wgpu::RenderPipeline;
+}
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]

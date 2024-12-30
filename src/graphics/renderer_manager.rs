@@ -7,9 +7,7 @@ use crate::{
     state::State,
 };
 
-use super::{
-    renderer::RenderUpdate, sprite::Renderable, RenderItem, RendererEvent, Sprite, Uniform,
-};
+use super::{renderer::RenderUpdate, RenderItem, RendererEvent, Texture, Uniform};
 
 // TODO: kinda hate this name...
 pub struct RendererManager {
@@ -31,6 +29,7 @@ impl RendererManager {
         let updates = self.get_render_updates(state);
         let items = self.get_render_items(state);
 
+        // TODO we can probably just send a single vec, push updates first, then items.
         if let Err(e) = self.sender.send(RendererEvent::Render(updates, items)) {
             log::error!("Error sending Render event: {}", e);
         }
@@ -41,41 +40,35 @@ impl RendererManager {
 
         let camera = state.get_resource::<Camera>().unwrap();
 
-        for (entity, (sprite, transform)) in state.query::<(&Sprite, &Transform)>().iter() {
-            let mut sprite = sprite.clone();
-
-            // TODO: it seems like getting the bitmap is very slow, might need to cache.
-            // we might also want to move bitmap loading to the rendering thread.
-            let assets = state.assets();
-            let texture = assets.get_texture(&sprite.texture_path).unwrap();
-            // log::info!("{}: {:?}", &sprite.texture_path, texture);
-
+        for (entity, (texture, transform)) in state.query::<(&Texture, &Transform)>().iter() {
             // FIXME: this updates the transform uniforms regardless if sprite/camera doesn't move.
-            let uniform = Uniform::compute(transform, &camera, &texture);
+            let uniform = Uniform::compute(transform, &camera, texture);
             updates.push(RenderUpdate::UpdateTransformUniform { entity, uniform });
 
             if !self.initialized_entities.contains(&entity) {
                 updates.push(RenderUpdate::CreateIndexBuffer {
                     entity,
-                    data: sprite.get_index_buffer().to_vec(),
+                    data: texture.index_buffer.clone(),
                 });
 
                 updates.push(RenderUpdate::CreateVertexBuffer {
                     entity,
-                    data: sprite.get_vertex_buffer(&texture).to_vec(),
+                    data: texture.vertex_buffer.clone(),
                 });
 
                 self.initialized_entities.insert(entity);
             }
 
-            if !self.initialized_bitmaps.contains(&sprite.texture_path) {
-                // We need to push the bind group update last since it consumes the bitmap.
-                updates.push(RenderUpdate::CreateTextureBindGroup {
-                    texture_path: sprite.texture_path.clone(),
-                    texture,
-                });
+            if !self.initialized_bitmaps.contains(&texture.path) {
+                self.initialized_bitmaps.insert(texture.path.clone());
 
-                self.initialized_bitmaps.insert(sprite.texture_path.clone());
+                // TODO: these clones are unfortunate, not sure if better way to do this.
+                updates.push(RenderUpdate::CreateTextureBindGroup {
+                    path: texture.path.clone(),
+                    width: texture.width,
+                    height: texture.height,
+                    data: texture.data.clone(),
+                });
             }
         }
 
@@ -85,12 +78,12 @@ impl RendererManager {
     fn get_render_items(&mut self, state: &mut State) -> Vec<RenderItem> {
         let mut items = Vec::new();
 
-        for (entity, (sprite, transform)) in state.query::<(&Sprite, &Transform)>().iter() {
+        for (entity, (texture, transform)) in state.query::<(&Texture, &Transform)>().iter() {
             items.push(RenderItem {
                 entity,
-                type_name: std::any::type_name::<Sprite>().to_string(),
-                texture_name: Some(sprite.texture_path.clone()),
-                range: sprite.index_buffer_range(),
+                type_name: std::any::type_name::<Texture>().to_string(),
+                texture_name: Some(texture.path.clone()),
+                range: texture.index_buffer_range.clone(),
                 layer: transform.z as usize,
             });
         }

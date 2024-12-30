@@ -2,10 +2,10 @@ use std::{collections::HashMap, path::Path};
 
 use nx_pkg4::{Node, NxFile};
 
-use crate::component::Texture;
+use crate::graphics::Texture;
 
 pub struct AssetManager {
-    nx: HashMap<String, NxFile>,
+    pub nx: HashMap<String, NxFile>,
 }
 
 impl AssetManager {
@@ -47,7 +47,7 @@ impl AssetManager {
             }
         };
 
-        match Texture::load(node) {
+        match Texture::load(path, node) {
             Ok(texture) => texture,
             Err(e) => {
                 log::error!("Error getting texture {}: {}", path, e);

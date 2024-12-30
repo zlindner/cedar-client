@@ -9,9 +9,7 @@ use hecs::Entity;
 use wgpu::util::DeviceExt;
 use winit::{dpi::PhysicalSize, window::Window};
 
-use crate::component::Texture;
-
-use super::{sprite::Renderable, Sprite, Uniform};
+use super::{Renderable, Texture, Uniform};
 
 pub struct Renderer {
     window: Arc<Window>,
@@ -127,7 +125,7 @@ impl Renderer {
     }
 
     pub fn run(mut self) {
-        self.register_render_pipeline::<Sprite>();
+        self.register_render_pipeline::<Texture>();
 
         loop {
             if let Ok(event) = self.receiver.recv() {
@@ -160,10 +158,12 @@ impl Renderer {
         while let Some(update) = updates.pop() {
             match update {
                 RenderUpdate::CreateTextureBindGroup {
-                    texture_path,
-                    texture,
+                    path,
+                    width,
+                    height,
+                    data,
                 } => {
-                    self.register_texture(texture_path, texture);
+                    self.register_texture(path, width, height, data);
                 }
                 RenderUpdate::CreateIndexBuffer { entity, data } => {
                     self.index_buffers.insert(
@@ -304,10 +304,10 @@ impl Renderer {
         );
     }
 
-    pub fn register_texture(&mut self, path: String, texture: Texture) {
+    pub fn register_texture(&mut self, path: String, width: u32, height: u32, data: Vec<u8>) {
         let texture_size = wgpu::Extent3d {
-            width: texture.width,
-            height: texture.height,
+            width,
+            height,
             depth_or_array_layers: 1,
         };
 
@@ -330,7 +330,7 @@ impl Renderer {
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
             },
-            &texture.data,
+            &data,
             wgpu::ImageDataLayout {
                 offset: 0,
                 bytes_per_row: Some(4 * texture_size.width),
@@ -379,8 +379,10 @@ pub enum RendererEvent {
 
 pub enum RenderUpdate {
     CreateTextureBindGroup {
-        texture_path: String,
-        texture: Texture,
+        path: String,
+        width: u32,
+        height: u32,
+        data: Vec<u8>,
     },
     CreateIndexBuffer {
         entity: Entity,
