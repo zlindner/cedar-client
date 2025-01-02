@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     sync::{mpsc, Arc},
     thread,
     time::{Duration, Instant},
@@ -6,15 +7,16 @@ use std::{
 
 use component::Camera;
 use graphics::{Renderer, RendererEvent, RendererManager};
-use resource::{AssetManager, WindowProxy};
+use resource::{input::CursorState, AssetManager, Cursor, WindowProxy};
 use scene::{LoginScene, Scene};
 use state::State;
+use system::{CursorSystem, System};
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
     event::WindowEvent,
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
-    window::{Window, WindowId},
+    window::{CustomCursor, Window, WindowId},
 };
 
 mod component;
@@ -22,6 +24,7 @@ mod graphics;
 mod resource;
 mod scene;
 mod state;
+mod system;
 
 enum WindowState {
     Uninitialized,
@@ -35,37 +38,14 @@ struct WindowManager {
 struct Cedar {
     window: Arc<Window>,
     state: State,
+    systems: Vec<Box<dyn System>>,
     scene: Box<dyn Scene>,
     renderer_tx: mpsc::Sender<RendererEvent>,
     window_rx: mpsc::Receiver<WindowEvent>,
+    custom_cursors: HashMap<CursorState, CustomCursor>,
 }
 
 impl Cedar {
-    fn new(event_loop: &ActiveEventLoop) {
-        /*let ui_nx = NxFile::open(Path::new("nx/UI.nx")).unwrap();
-        let root = ui_nx.root();
-        let nx_cursor = root
-            .get("Basic.img")
-            .get("Cursor")
-            .get("0")
-            .get("0")
-            .bitmap()
-            .unwrap()
-            .unwrap();
-
-        let mut bgra = nx_cursor.data.clone();
-
-        for pixel in bgra.chunks_exact_mut(4) {
-            pixel.swap(0, 2); // Swap R (index 0) and B (index 2)
-        }
-
-        // TODO: we need to call window.set_cursor when required to change cursor icon.
-        // TODO: we need to figure out the right x and y hotspots.
-        let cursor = event_loop.create_custom_cursor(
-            CustomCursor::from_rgba(bgra, nx_cursor.width, nx_cursor.height, 7, 7).unwrap(),
-        );*/
-    }
-
     fn run(mut self) {
         self.init();
 
@@ -79,6 +59,11 @@ impl Cedar {
             if limiter.ready_for_update() {
                 self.handle_window_events();
 
+                for system in self.systems.iter() {
+                    system.execute(&mut self.state);
+                }
+
+                self.update_cursor_icon();
                 limiter.last_update_start = Instant::now();
             }
 
@@ -108,15 +93,19 @@ impl Cedar {
             .inner_size()
             .to_logical(self.window.scale_factor());
 
-        self.state.insert_resource(AssetManager::new());
-        self.state.insert_resource(Camera::new(
-            logical_window_size.width,
-            logical_window_size.height,
-        ));
-        self.state.insert_resource(WindowProxy::new(
-            self.window.inner_size(),
-            self.window.scale_factor(),
-        ));
+        self.state
+            .insert_resource(AssetManager::new())
+            .insert_resource(Camera::new(
+                logical_window_size.width,
+                logical_window_size.height,
+            ))
+            .insert_resource(Cursor::new())
+            .insert_resource(WindowProxy::new(
+                self.window.inner_size(),
+                self.window.scale_factor(),
+            ));
+
+        self.systems.push(Box::new(CursorSystem::default()));
 
         self.scene.init(&mut self.state);
     }
@@ -126,6 +115,17 @@ impl Cedar {
     fn handle_window_events(&self) {
         while let Ok(event) = self.window_rx.try_recv() {
             match event {
+                WindowEvent::CursorMoved { position, .. } => {
+                    // Since `position` is a `PhysicalPosition`, we need to apply the current scale
+                    // factor to get the `LogicalPosition`.
+                    let scale_factor = self.state.window().scale_factor;
+                    self.state
+                        .cursor()
+                        .set_position(position.x / scale_factor, position.y / scale_factor);
+                }
+                WindowEvent::MouseInput { button, state, .. } => {
+                    self.state.cursor().add_event(button, state);
+                }
                 WindowEvent::Resized(new_size) => {
                     if let Err(e) = self.renderer_tx.send(RendererEvent::Resize(new_size)) {
                         log::error!("Error sending resize event to renderer: {}", e);
@@ -138,6 +138,29 @@ impl Cedar {
                 _ => {}
             }
         }
+    }
+
+    fn update_cursor_icon(&self) {
+        let mut cursor = self.state.cursor();
+
+        if !cursor.state_changed {
+            return;
+        }
+
+        match cursor.state() {
+            CursorState::Hidden => self.window.set_cursor_visible(false),
+            _ => {
+                self.window.set_cursor_visible(true);
+
+                if let Some(custom_cursor) = self.custom_cursors.get(cursor.state()) {
+                    self.window.set_cursor(custom_cursor.clone());
+                } else {
+                    log::warn!("No custom cursor found for state {:?}", cursor.state());
+                }
+            }
+        }
+
+        cursor.state_changed = false;
     }
 }
 
@@ -168,15 +191,41 @@ impl ApplicationHandler for WindowState {
 
                 let (window_tx, window_rx) = mpsc::channel::<WindowEvent>();
 
+                let assets = AssetManager::new();
+                let cursor = assets.get_texture("UI.nx/Basic.img/Cursor/0/0").unwrap();
+                log::info!("Cursor: {:?}", cursor);
+
+                let mut bgra = cursor.data.clone();
+
+                for pixel in bgra.chunks_exact_mut(4) {
+                    pixel.swap(0, 2); // Swap R (index 0) and B (index 2)
+                }
+
+                let mut custom_cursors = HashMap::new();
+                custom_cursors.insert(
+                    CursorState::Idle,
+                    event_loop.create_custom_cursor(
+                        CustomCursor::from_rgba(
+                            bgra,
+                            cursor.width as u16,
+                            cursor.height as u16,
+                            7,
+                            7,
+                        )
+                        .unwrap(),
+                    ),
+                );
+
                 // Create and run the main game loop.
                 thread::spawn(move || {
-                    // TODO: maybe Cedar::run() makes more sense.
                     let cedar = Cedar {
                         window: window.clone(),
                         state: State::new(),
+                        systems: Vec::new(),
                         scene: Box::new(LoginScene::default()),
                         renderer_tx,
                         window_rx: window_rx,
+                        custom_cursors,
                     };
 
                     cedar.run();

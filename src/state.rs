@@ -8,7 +8,7 @@ use std::{
 use downcast_rs::{impl_downcast, Downcast};
 use hecs::{DynamicBundle, Entity, Query, QueryBorrow, QueryMut, World};
 
-use crate::resource::{AssetManager, WindowProxy};
+use crate::resource::{AssetManager, Cursor, WindowProxy};
 
 pub struct State {
     world: World,
@@ -35,9 +35,11 @@ impl State {
         self.world.query_mut::<Q>()
     }
 
-    pub fn insert_resource<T: Resource>(&mut self, resource: T) {
+    pub fn insert_resource<T: Resource>(&mut self, resource: T) -> &mut Self {
         self.resources
             .insert(ResourceTypeId::of::<T>(), RefCell::new(Box::new(resource)));
+
+        self
     }
 
     pub fn get_resource<T: Resource>(&self) -> Option<Ref<T>> {
@@ -57,6 +59,11 @@ impl State {
     pub fn assets(&self) -> Ref<AssetManager> {
         self.get_resource::<AssetManager>()
             .expect("AssetManager should exist")
+    }
+
+    pub fn cursor(&self) -> RefMut<Cursor> {
+        self.get_resource_mut::<Cursor>()
+            .expect("Cursor should exist")
     }
 
     pub fn window(&self) -> RefMut<WindowProxy> {

@@ -1,8 +1,8 @@
 use winit::dpi::PhysicalSize;
 
 pub struct WindowProxy {
-    inner_size: PhysicalSize<u32>,
-    scale_factor: f64,
+    pub inner_size: PhysicalSize<u32>,
+    pub scale_factor: f64,
 }
 
 impl WindowProxy {
