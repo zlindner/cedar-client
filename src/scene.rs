@@ -71,11 +71,14 @@ impl Scene for LoginScene {
     }
 }
 
-fn get_button(base_path: &str, state: &State) -> (Button, Texture) {
+fn get_button(base_path: &str, state: &mut State) -> (Button, Texture) {
     let assets = state.assets();
     let texture = assets
         .get_texture(&format!("{}/normal/0", base_path))
         .unwrap();
 
-    (Button::new(texture.width, texture.height), texture)
+    (
+        Button::new(texture.width, texture.height, || log::info!("Clicked!")),
+        texture,
+    )
 }

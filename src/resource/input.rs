@@ -11,8 +11,8 @@ const HIDE_AFTER_SECONDS: u64 = 5;
 
 #[derive(Debug)]
 pub struct Cursor {
-    pub x: f64,
-    pub y: f64,
+    x: f64,
+    y: f64,
     state: CursorState,
 
     /// Whether the cursor's state recently changed.
@@ -37,6 +37,10 @@ impl Cursor {
             events: Vec::new(),
             last_moved: Instant::now(),
         }
+    }
+
+    pub fn position(&self) -> (f64, f64) {
+        (self.x, self.y)
     }
 
     pub fn set_position(&mut self, x: f64, y: f64) {
@@ -73,6 +77,10 @@ impl Cursor {
     pub fn should_hide(&self) -> bool {
         // TODO: there are certain states where we should always return false, ex. grabbing.
         Instant::now() - self.last_moved > Duration::from_secs(HIDE_AFTER_SECONDS)
+    }
+
+    pub fn is_button_pressed(&self, button: MouseButton) -> bool {
+        self.pressed_buttons.contains(&button)
     }
 }
 

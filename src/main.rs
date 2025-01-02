@@ -10,7 +10,7 @@ use graphics::{Renderer, RendererEvent, RendererManager};
 use resource::{input::CursorState, AssetManager, Cursor, WindowProxy};
 use scene::{LoginScene, Scene};
 use state::State;
-use system::{CursorSystem, System};
+use system::{ui::ButtonSystem, System};
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
@@ -105,7 +105,7 @@ impl Cedar {
                 self.window.scale_factor(),
             ));
 
-        self.systems.push(Box::new(CursorSystem::default()));
+        self.systems.push(Box::new(ButtonSystem::default()));
 
         self.scene.init(&mut self.state);
     }
@@ -143,21 +143,16 @@ impl Cedar {
     fn update_cursor_icon(&self) {
         let mut cursor = self.state.cursor();
 
+        self.window.set_cursor_visible(!cursor.should_hide());
+
         if !cursor.state_changed {
             return;
         }
 
-        match cursor.state() {
-            CursorState::Hidden => self.window.set_cursor_visible(false),
-            _ => {
-                self.window.set_cursor_visible(true);
-
-                if let Some(custom_cursor) = self.custom_cursors.get(cursor.state()) {
-                    self.window.set_cursor(custom_cursor.clone());
-                } else {
-                    log::warn!("No custom cursor found for state {:?}", cursor.state());
-                }
-            }
+        if let Some(custom_cursor) = self.custom_cursors.get(cursor.state()) {
+            self.window.set_cursor(custom_cursor.clone());
+        } else {
+            log::warn!("No custom cursor found for state {:?}", cursor.state());
         }
 
         cursor.state_changed = false;
