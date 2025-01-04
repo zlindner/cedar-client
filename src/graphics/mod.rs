@@ -13,7 +13,7 @@ pub use self::renderer::RendererEvent;
 pub use self::renderer_manager::RendererManager;
 pub use self::texture::Texture;
 
-mod button;
+pub mod button;
 mod renderer;
 mod renderer_manager;
 mod texture;

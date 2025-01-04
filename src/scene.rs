@@ -66,6 +66,8 @@ impl Scene for LoginScene {
         }
 
         // "Login" button
+        // TODO: instead of spawning a single texture, we should have a Vec/array of textures.
+        // Renderer renders texture[state]?
         let (button, texture) = get_button("UI.nx/Login.img/Title/BtLogin", state);
         state.spawn((button, texture, Transform::from_xyz(454.0, 279.0, 11.0)));
     }

@@ -1,6 +1,10 @@
 use winit::event::MouseButton;
 
-use crate::{component::Transform, graphics::Button, state::State};
+use crate::{
+    component::Transform,
+    graphics::{button::ButtonState, Button, Texture},
+    state::State,
+};
 
 use super::System;
 
@@ -12,7 +16,7 @@ impl System for ButtonSystem {
         let (mouse_x, mouse_y) = state.cursor().position();
         let is_clicking = state.cursor().is_button_pressed(MouseButton::Left);
 
-        for (_, (button, transform)) in state.query_mut::<(&mut Button, &Transform)>() {
+        for (entity, (button, transform)) in state.query_mut::<(&mut Button, &Transform)>() {
             // The mouse is currently hovering over the button.
             if mouse_x >= transform.x.into()
                 && mouse_x <= (transform.x + button.width as f32).into()
@@ -23,6 +27,7 @@ impl System for ButtonSystem {
 
                 // FIXME this clicks multiple times.
                 if is_clicking {
+                    button.state = ButtonState::Pressed;
                     (button.on_click)();
                 }
             }

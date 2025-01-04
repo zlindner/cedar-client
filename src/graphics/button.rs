@@ -1,7 +1,7 @@
 pub struct Button {
     pub width: u32,
     pub height: u32,
-    state: ButtonState,
+    pub state: ButtonState,
     pub on_click: fn(),
 }
 
@@ -17,8 +17,8 @@ impl Button {
 }
 
 pub enum ButtonState {
-    Normal,
-    Pressed,
-    MouseOver,
-    Disabled,
+    Normal = 0,
+    Pressed = 1,
+    Hovered = 2,
+    Disabled = 3,
 }
