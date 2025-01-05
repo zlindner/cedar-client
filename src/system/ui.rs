@@ -16,6 +16,10 @@ impl System for ButtonSystem {
         let is_clicking = state.cursor().is_button_pressed(MouseButton::Left);
 
         for button in state.buttons.iter_mut() {
+            if button.state == ButtonState::Disabled {
+                continue;
+            }
+
             let transform = button.transform();
 
             // The mouse is currently hovering over the button.

@@ -65,7 +65,7 @@ impl RenderableV2 for Button {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub enum ButtonState {
     Default = 0,
     Pressed = 1,

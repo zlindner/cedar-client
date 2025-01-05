@@ -73,6 +73,7 @@ impl RendererManager {
 
         // Sort render items by their z position/layer.
         // High layer = front, low layer = back.
+        // TODO: instead of this we should have a RenderLayer enum, ex. UI, Foreground, Background, ...
         items.sort_by(|a, b| b.layer.cmp(&a.layer));
         items
     }

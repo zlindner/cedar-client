@@ -6,15 +6,13 @@ use crate::graphics::Texture;
 
 static NX_FILES: LazyLock<HashMap<String, NxFile>> = LazyLock::new(|| {
     let mut nx_files = HashMap::new();
+    let paths = std::fs::read_dir("nx").expect("nx folder should exist");
 
-    nx_files.insert(
-        "Map001.nx".to_string(),
-        NxFile::open(Path::new("nx/Map001.nx")).unwrap(),
-    );
-    nx_files.insert(
-        "UI.nx".to_string(),
-        NxFile::open(Path::new("nx/UI.nx")).unwrap(),
-    );
+    for path in paths {
+        let file_name = path.unwrap().file_name().into_string().unwrap();
+        let nx_path = format!("nx/{}", file_name);
+        nx_files.insert(file_name, NxFile::open(Path::new(&nx_path)).unwrap());
+    }
 
     nx_files
 });

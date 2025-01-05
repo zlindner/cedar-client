@@ -43,6 +43,7 @@ impl Texture {
         let bitmap = match node.bitmap()? {
             Some(bitmap) => bitmap,
             None => {
+                log::warn!("{} isn't a bitmap", path);
                 return Ok(None);
             }
         };
