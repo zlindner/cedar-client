@@ -1,6 +1,9 @@
 use crate::{
     component::Transform,
-    graphics::{Button, Sprite},
+    graphics::{
+        ui::{Button, TextInput},
+        Sprite,
+    },
     state::State,
 };
 
@@ -15,6 +18,7 @@ impl Scene for LoginScene {
     fn init(&mut self, state: &mut State) {
         init_sprites(state);
         init_buttons(state);
+        init_text_inputs(state);
     }
 }
 
@@ -80,4 +84,11 @@ fn init_buttons(state: &mut State) {
     state.buttons.push(join_button);
     state.buttons.push(website_button);
     state.buttons.push(exit_button);
+}
+
+fn init_text_inputs(state: &mut State) {
+    let username_input =
+        TextInput::new(150, 24).with_transform(Transform::from_xyz(296.0, 279.0, 11.0));
+
+    state.text_inputs.push(username_input);
 }

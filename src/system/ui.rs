@@ -1,7 +1,7 @@
 use winit::event::MouseButton;
 
 use crate::{
-    graphics::{button::ButtonState, RenderableV2},
+    graphics::{ui::ButtonState, RenderableV2},
     state::State,
 };
 

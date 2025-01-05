@@ -8,7 +8,10 @@ use std::{
 use downcast_rs::{impl_downcast, Downcast};
 
 use crate::{
-    graphics::{Button, Sprite},
+    graphics::{
+        ui::{Button, TextInput},
+        Sprite,
+    },
     resource::{Cursor, WindowProxy},
 };
 
@@ -17,6 +20,7 @@ pub struct State {
     resources: HashMap<ResourceTypeId, RefCell<Box<dyn Resource>>>,
     pub sprites: Vec<Sprite>,
     pub buttons: Vec<Button>,
+    pub text_inputs: Vec<TextInput>,
 }
 
 impl State {
@@ -25,6 +29,7 @@ impl State {
             resources: HashMap::new(),
             sprites: Vec::new(),
             buttons: Vec::new(),
+            text_inputs: Vec::new(),
         }
     }
 

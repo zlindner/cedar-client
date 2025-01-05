@@ -7,7 +7,6 @@ use uuid::Uuid;
 use crate::component::Camera;
 use crate::component::Transform;
 
-pub use self::button::Button;
 pub use self::renderer::RenderItem;
 pub use self::renderer::Renderer;
 pub use self::renderer::RendererEvent;
@@ -15,11 +14,11 @@ pub use self::renderer_manager::RendererManager;
 pub use self::sprite::Sprite;
 pub use self::texture::Texture;
 
-pub mod button;
 mod renderer;
 mod renderer_manager;
 mod sprite;
 mod texture;
+pub mod ui;
 
 pub trait Renderable {
     fn create_render_pipeline(

@@ -1,8 +1,10 @@
 use uuid::Uuid;
 
-use crate::{component::Transform, resource::AssetManager};
-
-use super::{RenderableV2, Texture};
+use crate::{
+    component::Transform,
+    graphics::{RenderableV2, Texture},
+    resource::AssetManager,
+};
 
 // TODO: not a fan of this being in graphics, more like a game component.
 pub struct Button {
