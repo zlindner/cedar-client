@@ -1,18 +1,15 @@
 use std::{collections::HashSet, sync::mpsc};
 
-use hecs::Entity;
+use uuid::Uuid;
 
-use crate::{
-    component::{Camera, Transform},
-    state::State,
-};
+use crate::{component::Camera, state::State};
 
-use super::{renderer::RenderUpdate, RenderItem, RendererEvent, Texture, Uniform};
+use super::{renderer::RenderUpdate, RenderItem, RenderableV2, RendererEvent, Texture, Uniform};
 
 // TODO: kinda hate this name...
 pub struct RendererManager {
     sender: mpsc::Sender<RendererEvent>,
-    initialized_entities: HashSet<Entity>,
+    initialized_entities: HashSet<Uuid>,
     initialized_bitmaps: HashSet<String>,
 }
 
@@ -40,36 +37,12 @@ impl RendererManager {
 
         let camera = state.get_resource::<Camera>().unwrap();
 
-        for (entity, (texture, transform)) in state.query::<(&Texture, &Transform)>().iter() {
-            // FIXME: this updates the transform uniforms regardless if sprite/camera doesn't move.
-            let uniform = Uniform::compute(transform, &camera, texture);
-            updates.push(RenderUpdate::UpdateTransformUniform { entity, uniform });
+        for sprite in state.sprites.iter() {
+            updates.append(&mut self.get_updates_for_component(sprite, &camera));
+        }
 
-            if !self.initialized_entities.contains(&entity) {
-                updates.push(RenderUpdate::CreateIndexBuffer {
-                    entity,
-                    data: texture.index_buffer.clone(),
-                });
-
-                updates.push(RenderUpdate::CreateVertexBuffer {
-                    entity,
-                    data: texture.vertex_buffer.clone(),
-                });
-
-                self.initialized_entities.insert(entity);
-            }
-
-            if !self.initialized_bitmaps.contains(&texture.path) {
-                self.initialized_bitmaps.insert(texture.path.clone());
-
-                // TODO: these clones are unfortunate, not sure if better way to do this.
-                updates.push(RenderUpdate::CreateTextureBindGroup {
-                    path: texture.path.clone(),
-                    width: texture.width,
-                    height: texture.height,
-                    data: texture.data.clone(),
-                });
-            }
+        for button in state.buttons.iter() {
+            updates.append(&mut self.get_updates_for_component(button, &camera));
         }
 
         updates
@@ -78,13 +51,23 @@ impl RendererManager {
     fn get_render_items(&mut self, state: &mut State) -> Vec<RenderItem> {
         let mut items = Vec::new();
 
-        for (entity, (texture, transform)) in state.query::<(&Texture, &Transform)>().iter() {
+        for sprite in state.sprites.iter() {
             items.push(RenderItem {
-                entity,
+                id: *sprite.id(),
                 type_name: std::any::type_name::<Texture>().to_string(),
-                texture_name: Some(texture.path.clone()),
-                range: texture.index_buffer_range.clone(),
-                layer: transform.z as usize,
+                texture_name: Some(sprite.texture().path.clone()),
+                range: sprite.texture().index_buffer_range.clone(),
+                layer: sprite.transform().z as usize,
+            });
+        }
+
+        for button in state.buttons.iter() {
+            items.push(RenderItem {
+                id: *button.id(),
+                type_name: std::any::type_name::<Texture>().to_string(),
+                texture_name: Some(button.texture().path.clone()),
+                range: button.texture().index_buffer_range.clone(),
+                layer: button.transform().z as usize,
             });
         }
 
@@ -92,5 +75,47 @@ impl RendererManager {
         // High layer = front, low layer = back.
         items.sort_by(|a, b| b.layer.cmp(&a.layer));
         items
+    }
+
+    fn get_updates_for_component<T: RenderableV2>(
+        &mut self,
+        component: &T,
+        camera: &Camera,
+    ) -> Vec<RenderUpdate> {
+        let mut updates = Vec::new();
+
+        let id = component.id();
+        let texture = component.texture();
+        let transform = component.transform();
+
+        if !self.initialized_entities.contains(id) {
+            updates.push(RenderUpdate::CreateIndexBuffer {
+                id: *id,
+                data: texture.index_buffer.clone(),
+            });
+
+            updates.push(RenderUpdate::CreateVertexBuffer {
+                id: *id,
+                data: texture.vertex_buffer.clone(),
+            });
+
+            self.initialized_entities.insert(*id);
+        }
+
+        if !self.initialized_bitmaps.contains(&texture.path) {
+            self.initialized_bitmaps.insert(texture.path.clone());
+
+            updates.push(RenderUpdate::CreateTextureBindGroup {
+                path: texture.path.clone(),
+                width: texture.width,
+                height: texture.height,
+                data: texture.data.clone(),
+            });
+        }
+
+        let uniform = Uniform::compute(texture, transform, camera);
+        updates.push(RenderUpdate::UpdateTransformUniform { id: *id, uniform });
+
+        updates
     }
 }

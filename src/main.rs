@@ -94,7 +94,6 @@ impl Cedar {
             .to_logical(self.window.scale_factor());
 
         self.state
-            .insert_resource(AssetManager::new())
             .insert_resource(Camera::new(
                 logical_window_size.width,
                 logical_window_size.height,
@@ -186,22 +185,14 @@ impl ApplicationHandler for WindowState {
 
                 let (window_tx, window_rx) = mpsc::channel::<WindowEvent>();
 
-                let assets = AssetManager::new();
-                let cursor = assets.get_texture("UI.nx/Basic.img/Cursor/0/0").unwrap();
-                log::info!("Cursor: {:?}", cursor);
-
-                let mut bgra = cursor.data.clone();
-
-                for pixel in bgra.chunks_exact_mut(4) {
-                    pixel.swap(0, 2); // Swap R (index 0) and B (index 2)
-                }
+                let cursor = AssetManager::get_texture_rgba("UI.nx/Basic.img/Cursor/0/0").unwrap();
 
                 let mut custom_cursors = HashMap::new();
                 custom_cursors.insert(
                     CursorState::Idle,
                     event_loop.create_custom_cursor(
                         CustomCursor::from_rgba(
-                            bgra,
+                            cursor.data,
                             cursor.width as u16,
                             cursor.height as u16,
                             7,

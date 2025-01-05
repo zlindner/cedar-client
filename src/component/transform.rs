@@ -15,3 +15,14 @@ impl Transform {
         }
     }
 }
+
+impl Default for Transform {
+    fn default() -> Self {
+        Self {
+            x: Default::default(),
+            y: Default::default(),
+            z: Default::default(),
+            scale: 1.0,
+        }
+    }
+}

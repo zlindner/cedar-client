@@ -1,34 +1,32 @@
-use std::{collections::HashMap, path::Path};
+use std::{collections::HashMap, path::Path, sync::LazyLock};
 
 use nx_pkg4::{Node, NxFile};
 
 use crate::graphics::Texture;
 
-pub struct AssetManager {
-    pub nx: HashMap<String, NxFile>,
-}
+static NX_FILES: LazyLock<HashMap<String, NxFile>> = LazyLock::new(|| {
+    let mut nx_files = HashMap::new();
+
+    nx_files.insert(
+        "Map001.nx".to_string(),
+        NxFile::open(Path::new("nx/Map001.nx")).unwrap(),
+    );
+    nx_files.insert(
+        "UI.nx".to_string(),
+        NxFile::open(Path::new("nx/UI.nx")).unwrap(),
+    );
+
+    nx_files
+});
+
+pub struct AssetManager;
 
 impl AssetManager {
-    pub fn new() -> Self {
-        let mut nx = HashMap::new();
-
-        nx.insert(
-            "Map001.nx".to_string(),
-            NxFile::open(Path::new("nx/Map001.nx")).unwrap(),
-        );
-        nx.insert(
-            "UI.nx".to_string(),
-            NxFile::open(Path::new("nx/UI.nx")).unwrap(),
-        );
-
-        Self { nx }
-    }
-
-    pub fn get_texture(&self, path: &str) -> Option<Texture> {
+    pub fn get_texture(path: &str) -> Option<Texture> {
         log::info!("Getting texture for {}", path);
         let (file_name, path) = path.split_at(path.find("/").unwrap());
 
-        let file = match self.nx.get(file_name) {
+        let file = match NX_FILES.get(file_name) {
             Some(file) => file,
             None => {
                 log::warn!("{} isn't open", file_name);
@@ -54,5 +52,18 @@ impl AssetManager {
                 return None;
             }
         }
+    }
+
+    pub fn get_texture_rgba(path: &str) -> Option<Texture> {
+        let mut texture = match Self::get_texture(path) {
+            Some(texture) => texture,
+            None => return None,
+        };
+
+        for pixel in texture.data.chunks_exact_mut(4) {
+            pixel.swap(0, 2);
+        }
+
+        Some(texture)
     }
 }

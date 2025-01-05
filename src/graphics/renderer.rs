@@ -5,7 +5,7 @@ use std::{
     sync::{mpsc, Arc},
 };
 
-use hecs::Entity;
+use uuid::Uuid;
 use wgpu::util::DeviceExt;
 use winit::{dpi::PhysicalSize, window::Window};
 
@@ -25,10 +25,10 @@ pub struct Renderer {
 
     // A map of `Renderable` type names to render pipelines.
     render_pipelines: HashMap<String, wgpu::RenderPipeline>,
-    vertex_buffers: HashMap<Entity, wgpu::Buffer>,
-    index_buffers: HashMap<Entity, wgpu::Buffer>,
+    vertex_buffers: HashMap<Uuid, wgpu::Buffer>,
+    index_buffers: HashMap<Uuid, wgpu::Buffer>,
 
-    transform_bind_groups: HashMap<Entity, (wgpu::BindGroup)>,
+    transform_bind_groups: HashMap<Uuid, (wgpu::BindGroup)>,
     texture_bind_groups: HashMap<String, (wgpu::BindGroup, wgpu::Texture)>,
 }
 
@@ -165,9 +165,9 @@ impl Renderer {
                 } => {
                     self.register_texture(path, width, height, data);
                 }
-                RenderUpdate::CreateIndexBuffer { entity, data } => {
+                RenderUpdate::CreateIndexBuffer { id, data } => {
                     self.index_buffers.insert(
-                        entity,
+                        id,
                         self.device
                             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                                 label: None,
@@ -176,9 +176,9 @@ impl Renderer {
                             }),
                     );
                 }
-                RenderUpdate::CreateVertexBuffer { entity, data } => {
+                RenderUpdate::CreateVertexBuffer { id, data } => {
                     self.vertex_buffers.insert(
-                        entity,
+                        id,
                         self.device
                             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                                 label: None,
@@ -187,7 +187,7 @@ impl Renderer {
                             }),
                     );
                 }
-                RenderUpdate::UpdateTransformUniform { entity, uniform } => {
+                RenderUpdate::UpdateTransformUniform { id, uniform } => {
                     let uniform_buffer =
                         self.device
                             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -206,9 +206,7 @@ impl Renderer {
                             label: Some("uniform_bind_group"),
                         });
 
-                    self.transform_bind_groups
-                        .insert(entity, uniform_bind_group);
-
+                    self.transform_bind_groups.insert(id, uniform_bind_group);
                     self.queue
                         .write_buffer(&uniform_buffer, 0, bytemuck::cast_slice(&[uniform]));
                 }
@@ -253,14 +251,14 @@ impl Renderer {
             render_pass.set_pipeline(render_pipeline);
 
             // Set the vertex buffer for the item's entity.
-            let vertex_buffer = self.vertex_buffers.get(&item.entity).unwrap();
+            let vertex_buffer = self.vertex_buffers.get(&item.id).unwrap();
             render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
 
             // Set the index buffer for the item's entity.
-            let index_buffer = self.index_buffers.get(&item.entity).unwrap();
+            let index_buffer = self.index_buffers.get(&item.id).unwrap();
             render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
 
-            let transform_bind_group = self.transform_bind_groups.get(&item.entity).unwrap();
+            let transform_bind_group = self.transform_bind_groups.get(&item.id).unwrap();
             render_pass.set_bind_group(0, transform_bind_group, &[]);
 
             // Set the bind group for the item's texture (if applicable).
@@ -385,21 +383,21 @@ pub enum RenderUpdate {
         data: Vec<u8>,
     },
     CreateIndexBuffer {
-        entity: Entity,
+        id: Uuid,
         data: Vec<u8>,
     },
     CreateVertexBuffer {
-        entity: Entity,
+        id: Uuid,
         data: Vec<u8>,
     },
     UpdateTransformUniform {
-        entity: Entity,
+        id: Uuid,
         uniform: Uniform,
     },
 }
 
 pub struct RenderItem {
-    pub(crate) entity: Entity,
+    pub(crate) id: Uuid,
     pub(crate) type_name: String,
     pub(crate) texture_name: Option<String>,
     pub(crate) layer: usize,

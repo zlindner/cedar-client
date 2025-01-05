@@ -6,33 +6,26 @@ use std::{
 };
 
 use downcast_rs::{impl_downcast, Downcast};
-use hecs::{DynamicBundle, Entity, Query, QueryBorrow, QueryMut, World};
 
-use crate::resource::{AssetManager, Cursor, WindowProxy};
+use crate::{
+    graphics::{Button, Sprite},
+    resource::{Cursor, WindowProxy},
+};
 
+// TODO: maybe we can have a "UI" field that contains buttons, images, text fields, etc.
 pub struct State {
-    world: World,
     resources: HashMap<ResourceTypeId, RefCell<Box<dyn Resource>>>,
+    pub sprites: Vec<Sprite>,
+    pub buttons: Vec<Button>,
 }
 
 impl State {
     pub fn new() -> Self {
         Self {
-            world: World::new(),
             resources: HashMap::new(),
+            sprites: Vec::new(),
+            buttons: Vec::new(),
         }
-    }
-
-    pub fn spawn(&mut self, components: impl DynamicBundle) -> Entity {
-        self.world.spawn(components)
-    }
-
-    pub fn query<Q: Query>(&self) -> QueryBorrow<'_, Q> {
-        self.world.query::<Q>()
-    }
-
-    pub fn query_mut<Q: Query>(&mut self) -> QueryMut<'_, Q> {
-        self.world.query_mut::<Q>()
     }
 
     pub fn insert_resource<T: Resource>(&mut self, resource: T) -> &mut Self {
@@ -54,11 +47,6 @@ impl State {
         self.resources
             .get(type_id)
             .map(|x| RefMut::map(x.borrow_mut(), |inner| inner.downcast_mut::<T>().unwrap()))
-    }
-
-    pub fn assets(&self) -> Ref<AssetManager> {
-        self.get_resource::<AssetManager>()
-            .expect("AssetManager should exist")
     }
 
     pub fn cursor(&self) -> RefMut<Cursor> {

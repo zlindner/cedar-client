@@ -2,6 +2,7 @@ use ultraviolet::Mat4;
 use ultraviolet::Similarity3;
 use ultraviolet::Vec3;
 use ultraviolet::Vec4;
+use uuid::Uuid;
 
 use crate::component::Camera;
 use crate::component::Transform;
@@ -11,11 +12,13 @@ pub use self::renderer::RenderItem;
 pub use self::renderer::Renderer;
 pub use self::renderer::RendererEvent;
 pub use self::renderer_manager::RendererManager;
+pub use self::sprite::Sprite;
 pub use self::texture::Texture;
 
 pub mod button;
 mod renderer;
 mod renderer_manager;
+mod sprite;
 mod texture;
 
 pub trait Renderable {
@@ -25,6 +28,17 @@ pub trait Renderable {
         texture_bind_group_layout: &wgpu::BindGroupLayout,
         config: &wgpu::SurfaceConfiguration,
     ) -> wgpu::RenderPipeline;
+}
+
+pub trait RenderableV2 {
+    /// Gets the `Renderable` component's unique id.
+    fn id(&self) -> &Uuid;
+
+    /// Gets the `Renderable` component's `Texture`.
+    fn texture(&self) -> &Texture;
+
+    /// Gets the `Renderable` component's `Transform`.
+    fn transform(&self) -> &Transform;
 }
 
 #[repr(C)]
@@ -65,7 +79,7 @@ pub struct Uniform {
 }
 
 impl Uniform {
-    pub fn compute(transform: &Transform, camera: &Camera, texture: &Texture) -> Self {
+    pub fn compute(texture: &Texture, transform: &Transform, camera: &Camera) -> Self {
         let mut model_transform = Similarity3::identity();
         model_transform.prepend_scaling(transform.scale);
 
