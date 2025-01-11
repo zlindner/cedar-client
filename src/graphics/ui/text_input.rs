@@ -12,7 +12,8 @@ pub struct TextInput {
     width: u32,
     height: u32,
 
-    text: String,
+    pub text: String,
+    pub changed: bool,
 
     transform: Transform,
 }
@@ -24,6 +25,7 @@ impl TextInput {
             width,
             height,
             text: "TEST123".to_string(),
+            changed: true,
             transform: Transform::default(),
         }
     }

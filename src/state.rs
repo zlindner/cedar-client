@@ -9,7 +9,7 @@ use downcast_rs::{impl_downcast, Downcast};
 
 use crate::{
     graphics::{
-        ui::{Button, TextInput},
+        ui::{Button, Text, TextInput},
         Sprite,
     },
     resource::{Cursor, WindowProxy},
@@ -21,6 +21,7 @@ pub struct State {
     pub sprites: Vec<Sprite>,
     pub buttons: Vec<Button>,
     pub text_inputs: Vec<TextInput>,
+    pub text: Vec<Text>,
 }
 
 impl State {
@@ -30,6 +31,7 @@ impl State {
             sprites: Vec::new(),
             buttons: Vec::new(),
             text_inputs: Vec::new(),
+            text: Vec::new(),
         }
     }
 

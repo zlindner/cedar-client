@@ -10,7 +10,6 @@ use graphics::{Renderer, RendererEvent, RendererManager};
 use resource::{input::CursorState, AssetManager, Cursor, WindowProxy};
 use scene::{LoginScene, Scene};
 use state::State;
-use system::{ui::ButtonSystem, System};
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
@@ -38,7 +37,7 @@ struct WindowManager {
 struct Cedar {
     window: Arc<Window>,
     state: State,
-    systems: Vec<Box<dyn System>>,
+    systems: Vec<fn(&mut State)>,
     scene: Box<dyn Scene>,
     renderer_tx: mpsc::Sender<RendererEvent>,
     window_rx: mpsc::Receiver<WindowEvent>,
@@ -60,7 +59,7 @@ impl Cedar {
                 self.handle_window_events();
 
                 for system in self.systems.iter() {
-                    system.execute(&mut self.state);
+                    (system)(&mut self.state);
                 }
 
                 self.update_cursor_icon();
@@ -104,7 +103,8 @@ impl Cedar {
                 self.window.scale_factor(),
             ));
 
-        self.systems.push(Box::new(ButtonSystem::default()));
+        self.systems.push(system::ui::button_system);
+        self.systems.push(system::ui::text_system);
 
         self.scene.init(&mut self.state);
     }

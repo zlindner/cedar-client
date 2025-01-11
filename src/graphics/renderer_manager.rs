@@ -45,6 +45,10 @@ impl RendererManager {
             updates.append(&mut self.get_updates_for_component(button, &camera));
         }
 
+        for text in state.text.iter() {
+            updates.append(&mut self.get_updates_for_component(text, &camera));
+        }
+
         updates
     }
 
@@ -68,6 +72,16 @@ impl RendererManager {
                 texture_name: Some(button.texture().path.clone()),
                 range: button.texture().index_buffer_range.clone(),
                 layer: button.transform().z as usize,
+            });
+        }
+
+        for text in state.text.iter() {
+            items.push(RenderItem {
+                id: *text.id(),
+                type_name: std::any::type_name::<Texture>().to_string(),
+                texture_name: Some(text.texture().path.clone()),
+                range: text.texture().index_buffer_range.clone(),
+                layer: text.transform().z as usize,
             });
         }
 

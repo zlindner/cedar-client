@@ -2,7 +2,10 @@ use std::{fmt, ops::Range};
 
 use nx_pkg4::{Node, NxError, NxNode};
 
-use crate::graphics::Vertex;
+use crate::{
+    graphics::Vertex,
+    resource::{FontCharacter, FontData},
+};
 
 use super::Renderable;
 
@@ -16,10 +19,10 @@ pub struct Texture {
     pub height: u32,
     pub data: Vec<u8>,
 
-    /// The value of the `origin` child node.
+    /// The texture origin.
     pub origin: Option<(i32, i32)>,
 
-    /// The value of the `z` child node.
+    /// The texture layer.
     layer: Option<i64>,
 
     pub vertex_buffer: Vec<u8>,
@@ -27,8 +30,8 @@ pub struct Texture {
     pub index_buffer_range: Range<u32>,
 }
 
-// TODO: this can probably be something provided by nx-pkg4
 impl Texture {
+    /// Loads a bitmap texture from an `NxNode`.
     pub fn load(path: &str, node: NxNode) -> Result<Option<Self>, NxError> {
         let origin = match node.get("origin") {
             Some(child) => child.vector()?,
@@ -50,12 +53,12 @@ impl Texture {
 
         let width = bitmap.width.into();
         let height = bitmap.height.into();
-        let vertex_buffer = Self::get_vertex_buffer(width, height);
+        let vertex_buffer = get_bitmap_vertex_buffer(width, height);
 
         Ok(Some(Self {
             path: path.to_string(),
-            width: bitmap.width.into(),
-            height: bitmap.height.into(),
+            width,
+            height,
             data: bitmap.data,
             origin,
             layer,
@@ -65,30 +68,20 @@ impl Texture {
         }))
     }
 
-    fn get_vertex_buffer(width: u32, height: u32) -> Vec<u8> {
-        let width = width as f32;
-        let height = height as f32;
+    pub fn font(character: &FontCharacter, font: &FontData) -> Self {
+        let vertex_buffer = get_font_vertex_buffer(character, font);
 
-        let vertices = [
-            Vertex {
-                position: [0.0, 0.0, 0.0],
-                tex_coords: [0.0, 0.0],
-            },
-            Vertex {
-                position: [0.0, height, 0.0],
-                tex_coords: [0.0, 1.0],
-            },
-            Vertex {
-                position: [width, height, 0.0],
-                tex_coords: [1.0, 1.0],
-            },
-            Vertex {
-                position: [width, 0.0, 0.0],
-                tex_coords: [1.0, 0.0],
-            },
-        ];
-
-        bytemuck::cast_slice(&vertices).to_vec()
+        Self {
+            path: "font".to_string(),
+            width: font.width,
+            height: font.height,
+            data: font.data.clone(), // TODO: fix this
+            origin: None,
+            layer: None,
+            vertex_buffer,
+            index_buffer: bytemuck::cast_slice(INDICES).to_vec(),
+            index_buffer_range: 0..INDICES.len() as u32,
+        }
     }
 }
 
@@ -193,4 +186,56 @@ impl Renderable for Texture {
             cache: None,
         })
     }
+}
+
+fn get_bitmap_vertex_buffer(width: u32, height: u32) -> Vec<u8> {
+    let width = width as f32;
+    let height = height as f32;
+
+    let vertices = [
+        Vertex {
+            position: [0.0, 0.0, 0.0],
+            tex_coords: [0.0, 0.0],
+        },
+        Vertex {
+            position: [0.0, height, 0.0],
+            tex_coords: [0.0, 1.0],
+        },
+        Vertex {
+            position: [width, height, 0.0],
+            tex_coords: [1.0, 1.0],
+        },
+        Vertex {
+            position: [width, 0.0, 0.0],
+            tex_coords: [1.0, 0.0],
+        },
+    ];
+
+    bytemuck::cast_slice(&vertices).to_vec()
+}
+
+fn get_font_vertex_buffer(character: &FontCharacter, font: &FontData) -> Vec<u8> {
+    let font_width = font.width as f32;
+    let font_height = font.height as f32;
+
+    let vertices = [
+        Vertex {
+            position: [0.0, 0.0, 0.0],
+            tex_coords: [character.x.0 / font_width, character.y.0 / font_height],
+        },
+        Vertex {
+            position: [0.0, character.height, 0.0],
+            tex_coords: [character.x.0 / font_width, character.y.1 / font_height],
+        },
+        Vertex {
+            position: [character.width, character.height, 0.0],
+            tex_coords: [character.x.1 / font_width, character.y.1 / font_height],
+        },
+        Vertex {
+            position: [character.width, 0.0, 0.0],
+            tex_coords: [character.x.1 / font_width, character.y.0 / font_height],
+        },
+    ];
+
+    bytemuck::cast_slice(&vertices).to_vec()
 }

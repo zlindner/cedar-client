@@ -75,7 +75,7 @@ fn init_buttons(state: &mut State) {
 
     let exit_button = Button::new("UI.nx/Login.img/Title/BtQuit")
         .with_transform(Transform::from_xyz(435.0, 352.0, 11.0))
-        .with_on_click(|| log::info!("exit"));
+        .with_on_click(|| std::process::exit(0));
 
     state.buttons.push(login_button);
     state.buttons.push(save_login_id_button);
