@@ -10,7 +10,8 @@ use super::{renderer::RenderUpdate, RenderItem, RenderableV2, RendererEvent, Tex
 pub struct RendererManager {
     sender: mpsc::Sender<RendererEvent>,
     initialized_entities: HashSet<Uuid>,
-    initialized_bitmaps: HashSet<String>,
+    initialized_textures: HashSet<String>,
+    initialized_fonts: HashSet<String>,
 }
 
 impl RendererManager {
@@ -18,7 +19,8 @@ impl RendererManager {
         Self {
             sender,
             initialized_entities: HashSet::new(),
-            initialized_bitmaps: HashSet::new(),
+            initialized_textures: HashSet::new(),
+            initialized_fonts: HashSet::new(),
         }
     }
 
@@ -117,8 +119,8 @@ impl RendererManager {
             self.initialized_entities.insert(*id);
         }
 
-        if !self.initialized_bitmaps.contains(&texture.path) {
-            self.initialized_bitmaps.insert(texture.path.clone());
+        if !self.initialized_textures.contains(&texture.path) {
+            self.initialized_textures.insert(texture.path.clone());
 
             updates.push(RenderUpdate::CreateTextureBindGroup {
                 path: texture.path.clone(),

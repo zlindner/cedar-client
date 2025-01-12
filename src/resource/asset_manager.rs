@@ -126,6 +126,9 @@ impl FontData {
         };
         let glyphs_height = font.height().ceil() as u32;
         let mut min_y = 99999.;
+
+        // TODO: should be able to (eventually) get rid of image crate dependency and create our
+        // own simple image buffer.
         let mut image = DynamicImage::new_rgba8(glyphs_width + 40, glyphs_height + 40).to_rgba8();
         let mut characters = HashMap::new();
 
