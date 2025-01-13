@@ -4,7 +4,7 @@ use nx_pkg4::{Node, NxError, NxNode};
 
 use crate::{
     graphics::Vertex,
-    resource::{FontCharacter, FontData},
+    resource::{Font, FontCharacter},
 };
 
 use super::Renderable;
@@ -68,7 +68,7 @@ impl Texture {
         }))
     }
 
-    pub fn font(character: &FontCharacter, font: &FontData) -> Self {
+    pub fn font(character: &FontCharacter, font: &Font) -> Self {
         let vertex_buffer = get_font_vertex_buffer(character, font);
 
         Self {
@@ -214,7 +214,7 @@ fn get_bitmap_vertex_buffer(width: u32, height: u32) -> Vec<u8> {
     bytemuck::cast_slice(&vertices).to_vec()
 }
 
-fn get_font_vertex_buffer(character: &FontCharacter, font: &FontData) -> Vec<u8> {
+fn get_font_vertex_buffer(character: &FontCharacter, font: &Font) -> Vec<u8> {
     let font_width = font.width as f32;
     let font_height = font.height as f32;
 

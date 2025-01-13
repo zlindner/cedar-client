@@ -1,9 +1,10 @@
 use crate::{
-    component::Transform,
+    component::{Colour, Transform},
     graphics::{
         ui::{Button, TextInput},
         Sprite,
     },
+    resource::FontDescriptor,
     state::State,
 };
 
@@ -87,8 +88,9 @@ fn init_buttons(state: &mut State) {
 }
 
 fn init_text_inputs(state: &mut State) {
-    let username_input =
-        TextInput::new(150, 24).with_transform(Transform::from_xyz(296.0, 279.0, 11.0));
+    let username_input = TextInput::new(150, 24)
+        .with_font(FontDescriptor::new("Arial", 13, Colour::white()))
+        .with_transform(Transform::from_xyz(296.0, 279.0, 11.0));
 
     state.text_inputs.push(username_input);
 }

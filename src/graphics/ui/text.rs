@@ -3,7 +3,7 @@ use uuid::Uuid;
 use crate::{
     component::Transform,
     graphics::{RenderableV2, Texture},
-    resource::{FontCharacter, FontData},
+    resource::{Font, FontCharacter},
 };
 
 #[derive(Debug)]
@@ -14,7 +14,7 @@ pub struct Text {
 }
 
 impl Text {
-    pub fn new(character: &FontCharacter, font: &FontData) -> Self {
+    pub fn new(character: &FontCharacter, font: &Font) -> Self {
         Self {
             id: Uuid::new_v4(),
             texture: Texture::font(character, font),

@@ -1,6 +1,6 @@
 use uuid::Uuid;
 
-use crate::component::Transform;
+use crate::{component::Transform, resource::FontDescriptor};
 
 // TODO: placeholder text?
 // TODO: font size
@@ -15,7 +15,8 @@ pub struct TextInput {
     pub text: String,
     pub changed: bool,
 
-    transform: Transform,
+    pub font_descriptor: FontDescriptor,
+    pub transform: Transform,
 }
 
 impl TextInput {
@@ -24,10 +25,16 @@ impl TextInput {
             id: Uuid::new_v4(),
             width,
             height,
+            font_descriptor: FontDescriptor::default(),
             text: "TEST123".to_string(),
             changed: true,
             transform: Transform::default(),
         }
+    }
+
+    pub fn with_font(mut self, font_descriptor: FontDescriptor) -> Self {
+        self.font_descriptor = font_descriptor;
+        self
     }
 
     pub fn with_transform(mut self, transform: Transform) -> Self {

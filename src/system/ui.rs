@@ -48,7 +48,7 @@ pub fn button_system(state: &mut State) {
 pub fn text_system(state: &mut State) {
     for input in state.text_inputs.iter_mut() {
         // TODO: this should be the font/font size/colour of the input
-        let font = AssetManager::get_font("default").unwrap();
+        let font = AssetManager::get_font(&input.font_descriptor).unwrap();
 
         // The input hasn't changed, ex. nothing was typed while focused.
         if !input.changed {
@@ -69,9 +69,9 @@ pub fn text_system(state: &mut State) {
 
             let character = font.characters.get(&input_character).unwrap();
             let transform = Transform::from_xyz(
-                current_pos,
-                font.compute_vertical_offset(character.y.0),
-                20.0,
+                input.transform.x + current_pos,
+                input.transform.y + font.compute_vertical_offset(character.y.0),
+                input.transform.z,
             );
 
             // TODO: append any x/y padding from input
