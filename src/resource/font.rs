@@ -95,7 +95,7 @@ impl Font {
                         descriptor.colour.red,
                         descriptor.colour.green,
                         descriptor.colour.blue,
-                        px.0[3].saturating_add((v * 255.0) as u8),
+                        px.0[3].saturating_add((v * descriptor.colour.alpha as f32) as u8),
                     ]);
                 });
 
