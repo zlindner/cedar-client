@@ -63,6 +63,8 @@ pub fn text_system(state: &mut State) {
 
         for input_character in input.text.chars() {
             if input_character.is_whitespace() {
+                // TODO: this should be based on font size.
+                // white_space_size
                 current_pos += 5.0;
                 continue;
             }
@@ -76,6 +78,7 @@ pub fn text_system(state: &mut State) {
 
             // TODO: append any x/y padding from input
 
+            // TODO: this should be based on font size (size_between_char)
             current_pos = current_pos + character.width + 2.0;
 
             let ui_text = Text::new(character, font).with_transform(transform);
