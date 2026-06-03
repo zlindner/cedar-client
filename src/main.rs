@@ -14,7 +14,7 @@ use winit::{
     application::ApplicationHandler,
     dpi::{LogicalPosition, LogicalSize},
     event::{ElementState, MouseButton, WindowEvent},
-    event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
+    event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy},
     window::{CustomCursor, Window, WindowId},
 };
 
@@ -29,12 +29,13 @@ const VIRTUAL_WIDTH: f32 = 800.0;
 const VIRTUAL_HEIGHT: f32 = 600.0;
 
 enum WindowState {
-    Uninitialized,
+    Uninitialized(EventLoopProxy<RendererEvent>),
     Initialized(WindowManager),
 }
 
 struct WindowManager {
     window: Arc<Window>,
+    renderer: Renderer,
     sender: mpsc::Sender<GameWindowEvent>,
     logical_width: f32,
     logical_height: f32,
@@ -62,7 +63,7 @@ struct Cedar {
     state: State,
     systems: Vec<fn(&mut State)>,
     scene: Box<dyn Scene>,
-    renderer_tx: mpsc::Sender<RendererEvent>,
+    renderer_tx: EventLoopProxy<RendererEvent>,
     window_rx: mpsc::Receiver<GameWindowEvent>,
     custom_cursors: HashMap<CursorState, CustomCursor>,
 }
@@ -146,10 +147,6 @@ impl Cedar {
                     physical_size,
                     scale_factor,
                 } => {
-                    if let Err(e) = self.renderer_tx.send(RendererEvent::Resize(physical_size)) {
-                        log::error!("Error sending resize event to renderer: {}", e);
-                    }
-
                     self.state.window().resize(physical_size, scale_factor);
                 }
             }
@@ -175,10 +172,10 @@ impl Cedar {
     }
 }
 
-impl ApplicationHandler for WindowState {
+impl ApplicationHandler<RendererEvent> for WindowState {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         match self {
-            WindowState::Uninitialized => {
+            WindowState::Uninitialized(renderer_tx) => {
                 let window_attributes = Window::default_attributes()
                     .with_title("CedarMS")
                     .with_inner_size(LogicalSize::new(800, 600));
@@ -189,16 +186,10 @@ impl ApplicationHandler for WindowState {
                         .expect("window should be created"),
                 );
 
-                // Initialize the renderer passing it the event receiver.
-                // The channel is used for other components to send updates directly to the renderer,
-                // ex. an entity was added to the world to be rendered, an asset was registered, etc.
-                let (renderer_tx, renderer_rx) = mpsc::channel::<RendererEvent>();
-                let renderer =
-                    futures::executor::block_on(Renderer::new(window.clone(), renderer_rx));
-
-                // Start a new thread for the renderer.
-                // NOTE: creating the renderer must be done on the main thread.
-                thread::spawn(move || renderer.run());
+                // Initialize the renderer on the main thread so surface configure/present calls
+                // stay on the same thread as the winit window.
+                let renderer = futures::executor::block_on(Renderer::new(window.clone()));
+                let renderer_tx = renderer_tx.clone();
 
                 let initial_window_size = window.inner_size();
                 let initial_scale_factor = window.scale_factor();
@@ -243,6 +234,7 @@ impl ApplicationHandler for WindowState {
 
                 let manager = WindowManager {
                     window: window.clone(),
+                    renderer,
                     sender: window_tx,
                     logical_width: initial_logical_size.width,
                     logical_height: initial_logical_size.height,
@@ -260,7 +252,7 @@ impl ApplicationHandler for WindowState {
         event: WindowEvent,
     ) {
         let manager = match self {
-            WindowState::Uninitialized => return,
+            WindowState::Uninitialized(_) => return,
             WindowState::Initialized(manager) => manager,
         };
 
@@ -296,6 +288,7 @@ impl ApplicationHandler for WindowState {
                 let logical_size = physical_size.to_logical(scale_factor);
                 manager.logical_width = logical_size.width;
                 manager.logical_height = logical_size.height;
+                manager.renderer.resize(physical_size);
 
                 if let Err(e) = manager.sender.send(GameWindowEvent::Resized {
                     physical_size,
@@ -307,6 +300,15 @@ impl ApplicationHandler for WindowState {
             _ => {}
         }
     }
+
+    fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: RendererEvent) {
+        let manager = match self {
+            WindowState::Uninitialized(_) => return,
+            WindowState::Initialized(manager) => manager,
+        };
+
+        manager.renderer.handle_event(event);
+    }
 }
 
 fn main() {
@@ -314,11 +316,14 @@ fn main() {
         .with_max_level(tracing::Level::INFO)
         .init();
 
-    let event_loop = EventLoop::new().expect("event loop should be created");
+    let event_loop = EventLoop::<RendererEvent>::with_user_event()
+        .build()
+        .expect("event loop should be created");
+    let renderer_tx = event_loop.create_proxy();
     event_loop.set_control_flow(ControlFlow::Wait);
 
     event_loop
-        .run_app(&mut WindowState::Uninitialized)
+        .run_app(&mut WindowState::Uninitialized(renderer_tx))
         .expect("event loop should run");
 }
 

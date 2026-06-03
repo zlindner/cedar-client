@@ -1,9 +1,4 @@
-use std::{
-    collections::HashMap,
-    iter,
-    ops::Range,
-    sync::{mpsc, Arc},
-};
+use std::{collections::HashMap, iter, ops::Range, sync::Arc};
 
 use uuid::Uuid;
 use wgpu::util::DeviceExt;
@@ -12,8 +7,6 @@ use winit::{dpi::PhysicalSize, window::Window};
 use super::{Renderable, Texture, Uniform};
 
 pub struct Renderer {
-    receiver: mpsc::Receiver<RendererEvent>,
-
     surface: wgpu::Surface<'static>,
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -32,7 +25,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub async fn new(window: Arc<Window>, receiver: mpsc::Receiver<RendererEvent>) -> Self {
+    pub async fn new(window: Arc<Window>) -> Self {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
 
         let window_size = window.inner_size();
@@ -106,8 +99,7 @@ impl Renderer {
                 label: None,
             });
 
-        Self {
-            receiver,
+        let mut renderer = Self {
             surface,
             device,
             queue,
@@ -119,34 +111,30 @@ impl Renderer {
             index_buffers: HashMap::new(),
             transform_bind_groups: HashMap::new(),
             texture_bind_groups: HashMap::new(),
-        }
+        };
+
+        renderer.register_render_pipeline::<Texture>();
+        renderer
     }
 
-    pub fn run(mut self) {
-        self.register_render_pipeline::<Texture>();
+    pub fn handle_event(&mut self, event: RendererEvent) {
+        match event {
+            RendererEvent::Render(updates, items) => {
+                self.process_updates(updates);
 
-        loop {
-            if let Ok(event) = self.receiver.recv() {
-                match event {
-                    RendererEvent::Render(updates, items) => {
-                        self.process_updates(updates);
-
-                        match self.render(items) {
-                            Ok(_) => {}
-                            Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
-                                self.configure_surface();
-                            }
-                            Err(wgpu::SurfaceError::OutOfMemory) => {
-                                log::error!("System is out of memory, exiting");
-                                // TODO: event_loop.exit();
-                                // can probably use a one-shot channel for this.
-                            }
-                            Err(wgpu::SurfaceError::Timeout) => {
-                                log::warn!("Frame took longer than expected to render");
-                            }
-                        }
+                match self.render(items) {
+                    Ok(_) => {}
+                    Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
+                        self.configure_surface();
                     }
-                    RendererEvent::Resize(new_size) => self.resize(new_size),
+                    Err(wgpu::SurfaceError::OutOfMemory) => {
+                        log::error!("System is out of memory, exiting");
+                        // TODO: event_loop.exit();
+                        // can probably use a one-shot channel for this.
+                    }
+                    Err(wgpu::SurfaceError::Timeout) => {
+                        log::warn!("Frame took longer than expected to render");
+                    }
                 }
             }
         }
@@ -373,7 +361,6 @@ impl Renderer {
 
 pub enum RendererEvent {
     Render(Vec<RenderUpdate>, Vec<RenderItem>),
-    Resize(PhysicalSize<u32>),
 }
 
 pub enum RenderUpdate {

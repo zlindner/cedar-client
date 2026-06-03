@@ -1,6 +1,7 @@
-use std::{collections::HashSet, sync::mpsc};
+use std::collections::HashSet;
 
 use uuid::Uuid;
+use winit::event_loop::EventLoopProxy;
 
 use crate::{component::Camera, state::State};
 
@@ -8,14 +9,14 @@ use super::{renderer::RenderUpdate, RenderItem, RenderableV2, RendererEvent, Tex
 
 // TODO: kinda hate this name...
 pub struct RendererManager {
-    sender: mpsc::Sender<RendererEvent>,
+    sender: EventLoopProxy<RendererEvent>,
     initialized_entities: HashSet<Uuid>,
     initialized_textures: HashSet<String>,
     initialized_fonts: HashSet<String>,
 }
 
 impl RendererManager {
-    pub fn new(sender: mpsc::Sender<RendererEvent>) -> Self {
+    pub fn new(sender: EventLoopProxy<RendererEvent>) -> Self {
         Self {
             sender,
             initialized_entities: HashSet::new(),
@@ -29,7 +30,10 @@ impl RendererManager {
         let items = self.get_render_items(state);
 
         // TODO we can probably just send a single vec, push updates first, then items.
-        if let Err(e) = self.sender.send(RendererEvent::Render(updates, items)) {
+        if let Err(e) = self
+            .sender
+            .send_event(RendererEvent::Render(updates, items))
+        {
             log::error!("Error sending Render event: {}", e);
         }
     }
