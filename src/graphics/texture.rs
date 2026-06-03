@@ -1,6 +1,4 @@
-use std::fmt;
-
-use nx_pkg4::{NxError, NxNode};
+use std::{fmt, sync::Arc};
 
 use crate::{
     graphics::{ImageAsset, SourceRect, TexturedQuad, Vertex},
@@ -11,27 +9,28 @@ use super::Renderable;
 
 #[derive(Clone)]
 pub struct Texture {
-    pub image: ImageAsset,
+    pub image: Arc<ImageAsset>,
     pub quad: TexturedQuad,
 }
 
 impl Texture {
-    /// Loads a bitmap texture from an `NxNode`.
-    pub fn load(path: &str, node: NxNode) -> Result<Option<Self>, NxError> {
-        let image = match ImageAsset::load(path, node)? {
-            Some(image) => image,
-            None => return Ok(None),
-        };
-
+    pub fn from_image(image: Arc<ImageAsset>) -> Self {
         let quad = TexturedQuad::full_image(image.width, image.height);
-        Ok(Some(Self { image, quad }))
+        Self { image, quad }
+    }
+
+    pub fn from_image_asset(image: ImageAsset) -> Self {
+        Self::from_image(Arc::new(image))
     }
 
     pub fn font(character: &FontCharacter, font: &Font) -> Self {
         let image = ImageAsset::font(font);
         let quad = TexturedQuad::glyph(SourceRect::from(character), image.width, image.height);
 
-        Self { image, quad }
+        Self {
+            image: Arc::new(image),
+            quad,
+        }
     }
 }
 

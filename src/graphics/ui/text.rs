@@ -33,8 +33,8 @@ impl RenderableV2 for Text {
         &self.id
     }
 
-    fn texture(&self) -> &Texture {
-        &self.texture
+    fn texture(&self) -> Texture {
+        self.texture.clone()
     }
 
     fn transform(&self) -> &Transform {

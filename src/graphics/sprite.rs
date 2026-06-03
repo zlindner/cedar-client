@@ -1,13 +1,16 @@
 use uuid::Uuid;
 
-use crate::{component::Transform, resource::AssetManager};
+use crate::{
+    component::Transform,
+    resource::{AssetManager, ImageHandle},
+};
 
 use super::{RenderableV2, Texture};
 
 // TODO: not a fan of this being in graphics, more like a game component.
 pub struct Sprite {
     id: Uuid,
-    texture: Texture,
+    image: ImageHandle,
     transform: Transform,
 }
 
@@ -15,7 +18,7 @@ impl Sprite {
     pub fn new(nx_path: &str) -> Self {
         Self {
             id: Uuid::new_v4(),
-            texture: AssetManager::get_texture(nx_path).unwrap(),
+            image: AssetManager::load_image(nx_path).unwrap(),
             transform: Transform::default(),
         }
     }
@@ -31,8 +34,8 @@ impl RenderableV2 for Sprite {
         &self.id
     }
 
-    fn texture(&self) -> &Texture {
-        &self.texture
+    fn texture(&self) -> Texture {
+        Texture::from_image(self.image.image())
     }
 
     fn transform(&self) -> &Transform {

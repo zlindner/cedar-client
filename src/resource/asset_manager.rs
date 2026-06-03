@@ -1,8 +1,15 @@
-use std::{collections::HashMap, path::Path, sync::LazyLock};
+use std::{
+    collections::HashMap,
+    path::Path,
+    sync::{Arc, LazyLock, Mutex},
+};
 
 use nx_pkg4::{Node, NxFile};
 
-use crate::{component::Colour, graphics::Texture};
+use crate::{
+    component::Colour,
+    graphics::{ImageAsset, Texture},
+};
 
 use super::{Font, FontDescriptor};
 
@@ -30,9 +37,43 @@ static FONTS: LazyLock<HashMap<FontDescriptor, Font>> = LazyLock::new(|| {
 
 pub struct AssetManager;
 
+#[derive(Clone)]
+pub struct ImageHandle {
+    image: Arc<ImageAsset>,
+}
+
+impl ImageHandle {
+    pub fn image(&self) -> Arc<ImageAsset> {
+        self.image.clone()
+    }
+}
+
+static IMAGES: LazyLock<Mutex<HashMap<String, Arc<ImageAsset>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
 impl AssetManager {
+    pub fn load_image(path: &str) -> Option<ImageHandle> {
+        let mut images = IMAGES.lock().expect("image cache should lock");
+
+        if let Some(image) = images.get(path) {
+            return Some(ImageHandle {
+                image: image.clone(),
+            });
+        }
+
+        let image = Arc::new(Self::load_image_asset(path)?);
+        images.insert(path.to_string(), image.clone());
+
+        Some(ImageHandle { image })
+    }
+
     pub fn get_texture(path: &str) -> Option<Texture> {
-        log::info!("Getting texture for {}", path);
+        let handle = Self::load_image(path)?;
+        Some(Texture::from_image(handle.image()))
+    }
+
+    fn load_image_asset(path: &str) -> Option<ImageAsset> {
+        log::info!("Getting image for {}", path);
         let (file_name, path) = path.split_at(path.find("/").unwrap());
 
         let file = match NX_FILES.get(file_name) {
@@ -49,31 +90,33 @@ impl AssetManager {
         let node = match root.get(&path[1..path.len()]) {
             Some(node) => node,
             None => {
-                log::error!("Texture not found {}", path);
+                log::error!("Image not found {}", path);
                 return None;
             }
         };
 
-        match Texture::load(path, node) {
-            Ok(texture) => texture,
+        match ImageAsset::load(path, node) {
+            Ok(image) => image,
             Err(e) => {
-                log::error!("Error getting texture {}: {}", path, e);
+                log::error!("Error getting image {}: {}", path, e);
                 return None;
             }
         }
     }
 
     pub fn get_texture_rgba(path: &str) -> Option<Texture> {
-        let mut texture = match Self::get_texture(path) {
+        let texture = match Self::get_texture(path) {
             Some(texture) => texture,
             None => return None,
         };
 
-        for pixel in texture.image.data.chunks_exact_mut(4) {
+        let mut image = (*texture.image).clone();
+
+        for pixel in image.data.chunks_exact_mut(4) {
             pixel.swap(0, 2);
         }
 
-        Some(texture)
+        Some(Texture::from_image_asset(image))
     }
 
     pub fn get_font(descriptor: &FontDescriptor) -> Option<&'static Font> {

@@ -39,8 +39,8 @@ pub trait RenderableV2 {
     /// Gets the `Renderable` component's unique id.
     fn id(&self) -> &Uuid;
 
-    /// Gets the `Renderable` component's `Texture`.
-    fn texture(&self) -> &Texture;
+    /// Builds the `Renderable` component's texture data for render extraction.
+    fn texture(&self) -> Texture;
 
     /// Gets the `Renderable` component's `Transform`.
     fn transform(&self) -> &Transform;

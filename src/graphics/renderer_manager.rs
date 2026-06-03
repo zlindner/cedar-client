@@ -62,31 +62,34 @@ impl RendererManager {
         let mut items = Vec::new();
 
         for sprite in state.sprites.iter() {
+            let texture = sprite.texture();
             items.push(RenderItem {
                 id: *sprite.id(),
                 type_name: std::any::type_name::<Texture>().to_string(),
-                texture_name: Some(sprite.texture().image.path.clone()),
-                range: sprite.texture().quad.index_buffer_range.clone(),
+                texture_name: Some(texture.image.path.clone()),
+                range: texture.quad.index_buffer_range.clone(),
                 layer: sprite.transform().z as usize,
             });
         }
 
         for button in state.buttons.iter() {
+            let texture = button.texture();
             items.push(RenderItem {
                 id: *button.id(),
                 type_name: std::any::type_name::<Texture>().to_string(),
-                texture_name: Some(button.texture().image.path.clone()),
-                range: button.texture().quad.index_buffer_range.clone(),
+                texture_name: Some(texture.image.path.clone()),
+                range: texture.quad.index_buffer_range.clone(),
                 layer: button.transform().z as usize,
             });
         }
 
         for text in state.text.iter() {
+            let texture = text.texture();
             items.push(RenderItem {
                 id: *text.id(),
                 type_name: std::any::type_name::<Texture>().to_string(),
-                texture_name: Some(text.texture().image.path.clone()),
-                range: text.texture().quad.index_buffer_range.clone(),
+                texture_name: Some(texture.image.path.clone()),
+                range: texture.quad.index_buffer_range.clone(),
                 layer: text.transform().z as usize,
             });
         }
@@ -134,7 +137,7 @@ impl RendererManager {
             });
         }
 
-        let uniform = Uniform::compute(texture, transform, camera);
+        let uniform = Uniform::compute(&texture, transform, camera);
         updates.push(RenderUpdate::UpdateTransformUniform { id: *id, uniform });
 
         updates

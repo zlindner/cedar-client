@@ -3,7 +3,7 @@ use uuid::Uuid;
 use crate::{
     component::Transform,
     graphics::{RenderableV2, Texture},
-    resource::AssetManager,
+    resource::{AssetManager, ImageHandle},
 };
 
 // TODO: not a fan of this being in graphics, more like a game component.
@@ -14,7 +14,7 @@ pub struct Button {
     pub height: u32,
     pub state: ButtonState,
 
-    textures: [Option<Texture>; 4],
+    images: [Option<ImageHandle>; 4],
     transform: Transform,
 
     pub on_click: Option<fn()>,
@@ -22,17 +22,18 @@ pub struct Button {
 
 impl Button {
     pub fn new(nx_path: &str) -> Self {
-        let textures = load_textures(nx_path);
-        let default_texture = textures[ButtonState::Default as usize]
+        let images = load_images(nx_path);
+        let default_image = images[ButtonState::Default as usize]
             .as_ref()
-            .expect("button should have a default texture");
+            .map(ImageHandle::image)
+            .expect("button should have a default image");
 
         Self {
             id: Uuid::new_v4(),
-            width: default_texture.image.width,
-            height: default_texture.image.height,
+            width: default_image.width,
+            height: default_image.height,
             state: ButtonState::Default,
-            textures,
+            images,
             transform: Transform::default(),
             on_click: None,
         }
@@ -54,12 +55,14 @@ impl RenderableV2 for Button {
         &self.id
     }
 
-    fn texture(&self) -> &Texture {
-        self.textures[self.state as usize].as_ref().unwrap_or(
-            self.textures[ButtonState::Default as usize]
+    fn texture(&self) -> Texture {
+        let image = self.images[self.state as usize].as_ref().unwrap_or(
+            self.images[ButtonState::Default as usize]
                 .as_ref()
-                .expect("button should have a default texture"),
-        )
+                .expect("button should have a default image"),
+        );
+
+        Texture::from_image(image.image())
     }
 
     fn transform(&self) -> &Transform {
@@ -75,11 +78,11 @@ pub enum ButtonState {
     Disabled = 3,
 }
 
-fn load_textures(nx_path: &str) -> [Option<Texture>; 4] {
+fn load_images(nx_path: &str) -> [Option<ImageHandle>; 4] {
     [
-        AssetManager::get_texture(&format!("{}/normal/0", nx_path)),
-        AssetManager::get_texture(&format!("{}/pressed/0", nx_path)),
-        AssetManager::get_texture(&format!("{}/mouseOver/0", nx_path)),
-        AssetManager::get_texture(&format!("{}/disabled/0", nx_path)),
+        AssetManager::load_image(&format!("{}/normal/0", nx_path)),
+        AssetManager::load_image(&format!("{}/pressed/0", nx_path)),
+        AssetManager::load_image(&format!("{}/mouseOver/0", nx_path)),
+        AssetManager::load_image(&format!("{}/disabled/0", nx_path)),
     ]
 }
