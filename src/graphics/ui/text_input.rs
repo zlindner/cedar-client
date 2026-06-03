@@ -6,7 +6,7 @@ use crate::{
     resource::FontDescriptor,
 };
 
-use super::Text;
+use super::TextLayout;
 
 // TODO: placeholder text?
 // TODO: font size
@@ -24,7 +24,7 @@ pub struct TextInput {
     pub font_descriptor: FontDescriptor,
     pub transform: Transform,
 
-    glyphs: Vec<Text>,
+    layout: TextLayout,
 }
 
 impl TextInput {
@@ -37,7 +37,7 @@ impl TextInput {
             text: "TEST123".to_string(),
             changed: true,
             transform: Transform::default(),
-            glyphs: Vec::new(),
+            layout: TextLayout::empty(),
         }
     }
 
@@ -51,15 +51,13 @@ impl TextInput {
         self
     }
 
-    pub fn set_glyphs(&mut self, glyphs: Vec<Text>) {
-        self.glyphs = glyphs;
+    pub fn set_layout(&mut self, layout: TextLayout) {
+        self.layout = layout;
     }
 }
 
 impl RenderCommandSource for TextInput {
     fn append_render_commands(&self, commands: &mut Vec<RenderCommand>) {
-        for glyph in &self.glyphs {
-            glyph.append_render_commands(commands);
-        }
+        self.layout.append_render_commands(commands);
     }
 }
