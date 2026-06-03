@@ -2,7 +2,7 @@ use uuid::Uuid;
 
 use crate::{
     component::Transform,
-    graphics::{RenderableV2, Texture},
+    graphics::{RenderCommand, RenderCommandSource, Texture},
     resource::{AssetManager, ImageHandle},
 };
 
@@ -47,25 +47,26 @@ impl Button {
         self.on_click = Some(on_click);
         self
     }
+
+    pub fn transform(&self) -> &Transform {
+        &self.transform
+    }
 }
 
-impl RenderableV2 for Button {
-    fn id(&self) -> &Uuid {
-        &self.id
-    }
-
-    fn texture(&self) -> Texture {
+impl RenderCommandSource for Button {
+    fn render_command(&self) -> RenderCommand {
         let image = self.images[self.state as usize].as_ref().unwrap_or(
             self.images[ButtonState::Default as usize]
                 .as_ref()
                 .expect("button should have a default image"),
         );
 
-        Texture::from_image(image.image())
-    }
-
-    fn transform(&self) -> &Transform {
-        &self.transform
+        RenderCommand {
+            id: self.id,
+            texture: Texture::from_image(image.image()),
+            transform: self.transform,
+            layer: self.transform.z as usize,
+        }
     }
 }
 

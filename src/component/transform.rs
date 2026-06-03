@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct Transform {
     pub x: f32,
     pub y: f32,

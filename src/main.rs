@@ -6,7 +6,7 @@ use std::{
 };
 
 use component::Camera;
-use graphics::{Renderer, RendererEvent, RendererManager};
+use graphics::{RenderQueueBuilder, Renderer, RendererEvent};
 use resource::{input::CursorState, AssetManager, Cursor, WindowProxy};
 use scene::{LoginScene, Scene};
 use state::State;
@@ -73,7 +73,7 @@ impl Cedar {
     fn run(mut self) {
         self.init();
 
-        let mut renderer_manager = RendererManager::new(self.renderer_tx.clone());
+        let mut render_queue_builder = RenderQueueBuilder::new(self.renderer_tx.clone());
 
         let mut limiter = FrameLimiter::new(60);
         loop {
@@ -93,7 +93,7 @@ impl Cedar {
             let now = Instant::now();
 
             if limiter.ready_for_frame(now) {
-                renderer_manager.generate_and_send_events(&mut self.state);
+                render_queue_builder.generate_and_send_events(&mut self.state);
 
                 limiter.mark_frame_finished(Instant::now());
             }

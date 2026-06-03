@@ -2,7 +2,7 @@ use uuid::Uuid;
 
 use crate::{
     component::Transform,
-    graphics::{RenderableV2, Texture},
+    graphics::{RenderCommand, RenderCommandSource, Texture},
     resource::{Font, FontCharacter},
 };
 
@@ -28,16 +28,13 @@ impl Text {
     }
 }
 
-impl RenderableV2 for Text {
-    fn id(&self) -> &uuid::Uuid {
-        &self.id
-    }
-
-    fn texture(&self) -> Texture {
-        self.texture.clone()
-    }
-
-    fn transform(&self) -> &Transform {
-        &self.transform
+impl RenderCommandSource for Text {
+    fn render_command(&self) -> RenderCommand {
+        RenderCommand {
+            id: self.id,
+            texture: self.texture.clone(),
+            transform: self.transform,
+            layer: self.transform.z as usize,
+        }
     }
 }

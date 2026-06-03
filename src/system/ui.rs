@@ -2,10 +2,7 @@ use winit::event::MouseButton;
 
 use crate::{
     component::Transform,
-    graphics::{
-        ui::{ButtonState, Text},
-        RenderableV2,
-    },
+    graphics::ui::{ButtonState, Text},
     resource::{AssetManager, Font},
     state::State,
 };

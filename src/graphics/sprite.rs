@@ -2,7 +2,7 @@ use uuid::Uuid;
 
 use crate::{component::Transform, resource::ImageHandle};
 
-use super::{RenderableV2, Texture};
+use super::{RenderCommand, RenderCommandSource, Texture};
 
 // TODO: not a fan of this being in graphics, more like a game component.
 pub struct Sprite {
@@ -26,16 +26,13 @@ impl Sprite {
     }
 }
 
-impl RenderableV2 for Sprite {
-    fn id(&self) -> &Uuid {
-        &self.id
-    }
-
-    fn texture(&self) -> Texture {
-        Texture::from_image(self.image.image())
-    }
-
-    fn transform(&self) -> &Transform {
-        &self.transform
+impl RenderCommandSource for Sprite {
+    fn render_command(&self) -> RenderCommand {
+        RenderCommand {
+            id: self.id,
+            texture: Texture::from_image(self.image.image()),
+            transform: self.transform,
+            layer: self.transform.z as usize,
+        }
     }
 }

@@ -7,10 +7,10 @@ use uuid::Uuid;
 use crate::component::Camera;
 use crate::component::Transform;
 
+pub use self::render_queue_builder::RenderQueueBuilder;
 pub use self::renderer::RenderItem;
 pub use self::renderer::Renderer;
 pub use self::renderer::RendererEvent;
-pub use self::renderer_manager::RendererManager;
 pub use self::sprite::Sprite;
 pub use self::texture::Texture;
 pub use self::{
@@ -20,8 +20,8 @@ pub use self::{
 
 mod image;
 mod quad;
+mod render_queue_builder;
 mod renderer;
-mod renderer_manager;
 mod sprite;
 mod texture;
 pub mod ui;
@@ -35,15 +35,15 @@ pub trait Renderable {
     ) -> wgpu::RenderPipeline;
 }
 
-pub trait RenderableV2 {
-    /// Gets the `Renderable` component's unique id.
-    fn id(&self) -> &Uuid;
+pub struct RenderCommand {
+    pub id: Uuid,
+    pub texture: Texture,
+    pub transform: Transform,
+    pub layer: usize,
+}
 
-    /// Builds the `Renderable` component's texture data for render extraction.
-    fn texture(&self) -> Texture;
-
-    /// Gets the `Renderable` component's `Transform`.
-    fn transform(&self) -> &Transform;
+pub trait RenderCommandSource {
+    fn render_command(&self) -> RenderCommand;
 }
 
 #[repr(C)]
