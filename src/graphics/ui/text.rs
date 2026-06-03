@@ -60,18 +60,17 @@ impl TextLayout {
         let mut layout = Self::empty();
         let atlas = Arc::new(ImageAsset::font(font));
         let mut current_pos = 0.0;
+        let mut previous_character = None;
+
+        layout.height = font.line_height;
 
         for input_character in text.chars() {
-            if input_character.is_whitespace() {
-                // TODO: this should come from font metrics.
-                current_pos += 5.0;
-                layout.width = layout.width.max(current_pos);
-                continue;
-            }
+            current_pos += font.kerning(previous_character, input_character);
 
             let Some(character) = font.characters.get(&input_character) else {
-                current_pos += 5.0;
+                current_pos += font.advance(input_character);
                 layout.width = layout.width.max(current_pos);
+                previous_character = Some(input_character);
                 continue;
             };
 
@@ -85,10 +84,9 @@ impl TextLayout {
             let glyph = TextGlyph::new(character, atlas.clone()).with_transform(transform);
             layout.glyphs.push(glyph);
 
-            // TODO: this should use font advance and kerning.
-            current_pos += character.width + 2.0;
+            current_pos += character.advance;
             layout.width = layout.width.max(current_pos);
-            layout.height = layout.height.max(character.height);
+            previous_character = Some(input_character);
         }
 
         layout

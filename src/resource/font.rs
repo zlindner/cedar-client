@@ -8,6 +8,7 @@ use crate::component::Colour;
 /// The set of supported characters.
 const CHARACTERS: &str =
     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!@#$%^&*()_-+=<,>.?/:;'{[}]|\\\"";
+const WHITESPACE: char = ' ';
 
 #[derive(Hash, PartialEq, Eq, Clone)]
 pub struct FontDescriptor {
@@ -53,8 +54,11 @@ pub struct Font {
     pub data: Vec<u8>,
     pub width: u32,
     pub height: u32,
+    pub line_height: f32,
     pub min_y: f32,
     pub characters: HashMap<char, FontCharacter>,
+    whitespace_advance: f32,
+    kerning: HashMap<(char, char), f32>,
 }
 
 impl Font {
@@ -67,6 +71,8 @@ impl Font {
 
         let font = FontVec::try_from_vec(font_bytes).unwrap();
         let font = ab_glyph::Font::as_scaled(&font, PxScale::from(descriptor.size as f32));
+        let line_height = font.height();
+        let whitespace_advance = font.h_advance(font.scaled_glyph(WHITESPACE).id);
 
         let mut glyphs: Vec<Glyph> = Vec::new();
         let mut caret = point(0.0, font.ascent());
@@ -98,8 +104,24 @@ impl Font {
         // own simple image buffer.
         let mut image = DynamicImage::new_rgba8(glyphs_width + 40, glyphs_height + 40).to_rgba8();
         let mut characters = HashMap::new();
+        let mut kerning = HashMap::new();
+
+        for previous in CHARACTERS.chars().chain(std::iter::once(WHITESPACE)) {
+            let previous_id = font.scaled_glyph(previous).id;
+
+            for current in CHARACTERS.chars() {
+                let current_id = font.scaled_glyph(current).id;
+                let kern = font.kern(previous_id, current_id);
+
+                if kern != 0.0 {
+                    kerning.insert((previous, current), kern);
+                }
+            }
+        }
 
         for (pos, glyph) in glyphs.drain(0..glyphs.len()).enumerate() {
+            let character = CHARACTERS.chars().nth(pos).unwrap();
+
             if let Some(outlined) = font.outline_glyph(glyph) {
                 let bounds = outlined.px_bounds();
                 outlined.draw(|x, y, v| {
@@ -118,8 +140,12 @@ impl Font {
                 }
 
                 characters.insert(
-                    CHARACTERS.chars().nth(pos).unwrap(),
-                    FontCharacter::new((bounds.min.x, bounds.max.x), (bounds.min.y, bounds.max.y)),
+                    character,
+                    FontCharacter::new(
+                        (bounds.min.x, bounds.max.x),
+                        (bounds.min.y, bounds.max.y),
+                        font.h_advance(font.scaled_glyph(character).id),
+                    ),
                 );
             }
         }
@@ -129,8 +155,11 @@ impl Font {
             data: image.to_vec(),
             width: glyphs_width + 40,
             height: glyphs_height + 40,
+            line_height,
             min_y,
             characters,
+            whitespace_advance,
+            kerning,
         }
     }
 
@@ -141,6 +170,20 @@ impl Font {
 
         0.0
     }
+
+    pub fn advance(&self, character: char) -> f32 {
+        self.characters
+            .get(&character)
+            .map(|character| character.advance)
+            .unwrap_or(self.whitespace_advance)
+    }
+
+    pub fn kerning(&self, previous: Option<char>, current: char) -> f32 {
+        previous
+            .and_then(|previous| self.kerning.get(&(previous, current)))
+            .copied()
+            .unwrap_or(0.0)
+    }
 }
 
 pub struct FontCharacter {
@@ -148,15 +191,17 @@ pub struct FontCharacter {
     pub y: (f32, f32),
     pub width: f32,
     pub height: f32,
+    pub advance: f32,
 }
 
 impl FontCharacter {
-    pub fn new(x: (f32, f32), y: (f32, f32)) -> Self {
+    pub fn new(x: (f32, f32), y: (f32, f32), advance: f32) -> Self {
         Self {
             x,
             y,
             width: x.1 - x.0,
             height: y.1 - y.0,
+            advance,
         }
     }
 }
