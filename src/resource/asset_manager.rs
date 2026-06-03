@@ -69,7 +69,7 @@ impl AssetManager {
             None => return None,
         };
 
-        for pixel in texture.data.chunks_exact_mut(4) {
+        for pixel in texture.image.data.chunks_exact_mut(4) {
             pixel.swap(0, 2);
         }
 

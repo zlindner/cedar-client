@@ -65,8 +65,8 @@ impl RendererManager {
             items.push(RenderItem {
                 id: *sprite.id(),
                 type_name: std::any::type_name::<Texture>().to_string(),
-                texture_name: Some(sprite.texture().path.clone()),
-                range: sprite.texture().index_buffer_range.clone(),
+                texture_name: Some(sprite.texture().image.path.clone()),
+                range: sprite.texture().quad.index_buffer_range.clone(),
                 layer: sprite.transform().z as usize,
             });
         }
@@ -75,8 +75,8 @@ impl RendererManager {
             items.push(RenderItem {
                 id: *button.id(),
                 type_name: std::any::type_name::<Texture>().to_string(),
-                texture_name: Some(button.texture().path.clone()),
-                range: button.texture().index_buffer_range.clone(),
+                texture_name: Some(button.texture().image.path.clone()),
+                range: button.texture().quad.index_buffer_range.clone(),
                 layer: button.transform().z as usize,
             });
         }
@@ -85,8 +85,8 @@ impl RendererManager {
             items.push(RenderItem {
                 id: *text.id(),
                 type_name: std::any::type_name::<Texture>().to_string(),
-                texture_name: Some(text.texture().path.clone()),
-                range: text.texture().index_buffer_range.clone(),
+                texture_name: Some(text.texture().image.path.clone()),
+                range: text.texture().quad.index_buffer_range.clone(),
                 layer: text.transform().z as usize,
             });
         }
@@ -112,25 +112,25 @@ impl RendererManager {
         if !self.initialized_entities.contains(id) {
             updates.push(RenderUpdate::CreateIndexBuffer {
                 id: *id,
-                data: texture.index_buffer.clone(),
+                data: texture.quad.index_buffer.clone(),
             });
 
             updates.push(RenderUpdate::CreateVertexBuffer {
                 id: *id,
-                data: texture.vertex_buffer.clone(),
+                data: texture.quad.vertex_buffer.clone(),
             });
 
             self.initialized_entities.insert(*id);
         }
 
-        if !self.initialized_textures.contains(&texture.path) {
-            self.initialized_textures.insert(texture.path.clone());
+        if !self.initialized_textures.contains(&texture.image.path) {
+            self.initialized_textures.insert(texture.image.path.clone());
 
             updates.push(RenderUpdate::CreateTextureBindGroup {
-                path: texture.path.clone(),
-                width: texture.width,
-                height: texture.height,
-                data: texture.data.clone(),
+                path: texture.image.path.clone(),
+                width: texture.image.width,
+                height: texture.image.height,
+                data: texture.image.data.clone(),
             });
         }
 

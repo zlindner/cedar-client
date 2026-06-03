@@ -29,8 +29,8 @@ impl Button {
 
         Self {
             id: Uuid::new_v4(),
-            width: default_texture.width,
-            height: default_texture.height,
+            width: default_texture.image.width,
+            height: default_texture.image.height,
             state: ButtonState::Default,
             textures,
             transform: Transform::default(),

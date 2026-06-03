@@ -1,92 +1,42 @@
-use std::{fmt, ops::Range};
+use std::fmt;
 
-use nx_pkg4::{Node, NxError, NxNode};
+use nx_pkg4::{NxError, NxNode};
 
 use crate::{
-    graphics::Vertex,
+    graphics::{ImageAsset, SourceRect, TexturedQuad, Vertex},
     resource::{Font, FontCharacter},
 };
 
 use super::Renderable;
 
-const INDICES: &[u16] = &[0, 1, 3, 3, 1, 2];
-
 #[derive(Clone)]
 pub struct Texture {
-    pub path: String,
-
-    pub width: u32,
-    pub height: u32,
-    pub data: Vec<u8>,
-
-    /// The texture origin.
-    pub origin: Option<(i32, i32)>,
-
-    /// The texture layer.
-    layer: Option<i64>,
-
-    pub vertex_buffer: Vec<u8>,
-    pub index_buffer: Vec<u8>,
-    pub index_buffer_range: Range<u32>,
+    pub image: ImageAsset,
+    pub quad: TexturedQuad,
 }
 
 impl Texture {
     /// Loads a bitmap texture from an `NxNode`.
     pub fn load(path: &str, node: NxNode) -> Result<Option<Self>, NxError> {
-        let origin = match node.get("origin") {
-            Some(child) => child.vector()?,
-            None => None,
+        let image = match ImageAsset::load(path, node)? {
+            Some(image) => image,
+            None => return Ok(None),
         };
 
-        let layer = match node.get("z") {
-            Some(child) => child.integer()?,
-            None => None,
-        };
-
-        let bitmap = match node.bitmap()? {
-            Some(bitmap) => bitmap,
-            None => {
-                log::warn!("{} isn't a bitmap", path);
-                return Ok(None);
-            }
-        };
-
-        let width = bitmap.width.into();
-        let height = bitmap.height.into();
-        let vertex_buffer = get_bitmap_vertex_buffer(width, height);
-
-        Ok(Some(Self {
-            path: path.to_string(),
-            width,
-            height,
-            data: bitmap.data,
-            origin,
-            layer,
-            vertex_buffer,
-            index_buffer: bytemuck::cast_slice(INDICES).to_vec(),
-            index_buffer_range: 0..INDICES.len() as u32,
-        }))
+        let quad = TexturedQuad::full_image(image.width, image.height);
+        Ok(Some(Self { image, quad }))
     }
 
     pub fn font(character: &FontCharacter, font: &Font) -> Self {
-        let vertex_buffer = get_font_vertex_buffer(character, font);
+        let image = ImageAsset::font(font);
+        let quad = TexturedQuad::glyph(SourceRect::from(character), image.width, image.height);
 
-        Self {
-            path: "font".to_string(),
-            width: font.width,
-            height: font.height,
-            data: font.data.clone(), // TODO: fix this
-            origin: None,
-            layer: None,
-            vertex_buffer,
-            index_buffer: bytemuck::cast_slice(INDICES).to_vec(),
-            index_buffer_range: 0..INDICES.len() as u32,
-        }
+        Self { image, quad }
     }
 }
 
-/// Manually implementing Debug for Texture, replacing data with an empty slice since it can
-/// contain hundreds of elements and isn't useful to log.
+/// Manually implementing Debug for Texture, replacing pixel and buffer data with empty slices
+/// since they can contain hundreds of elements and aren't useful to log.
 impl fmt::Debug for Texture {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         #[derive(Debug)]
@@ -100,32 +50,18 @@ impl fmt::Debug for Texture {
             layer: &'a Option<i64>,
             vertex_buffer: [u8; 0],
             index_buffer: [u8; 0],
-            index_buffer_range: &'a Range<u32>,
         }
-
-        let Self {
-            path,
-            width,
-            height,
-            data: _,
-            origin,
-            layer,
-            vertex_buffer: _,
-            index_buffer: _,
-            index_buffer_range,
-        } = self;
 
         fmt::Debug::fmt(
             &Texture {
-                path,
-                width,
-                height,
+                path: &self.image.path,
+                width: &self.image.width,
+                height: &self.image.height,
                 data: [],
-                origin,
-                layer,
+                origin: &self.image.origin,
+                layer: &self.image.layer,
                 vertex_buffer: [],
                 index_buffer: [],
-                index_buffer_range,
             },
             f,
         )
@@ -186,56 +122,4 @@ impl Renderable for Texture {
             cache: None,
         })
     }
-}
-
-fn get_bitmap_vertex_buffer(width: u32, height: u32) -> Vec<u8> {
-    let width = width as f32;
-    let height = height as f32;
-
-    let vertices = [
-        Vertex {
-            position: [0.0, 0.0, 0.0],
-            tex_coords: [0.0, 0.0],
-        },
-        Vertex {
-            position: [0.0, height, 0.0],
-            tex_coords: [0.0, 1.0],
-        },
-        Vertex {
-            position: [width, height, 0.0],
-            tex_coords: [1.0, 1.0],
-        },
-        Vertex {
-            position: [width, 0.0, 0.0],
-            tex_coords: [1.0, 0.0],
-        },
-    ];
-
-    bytemuck::cast_slice(&vertices).to_vec()
-}
-
-fn get_font_vertex_buffer(character: &FontCharacter, font: &Font) -> Vec<u8> {
-    let font_width = font.width as f32;
-    let font_height = font.height as f32;
-
-    let vertices = [
-        Vertex {
-            position: [0.0, 0.0, 0.0],
-            tex_coords: [character.x.0 / font_width, character.y.0 / font_height],
-        },
-        Vertex {
-            position: [0.0, character.height, 0.0],
-            tex_coords: [character.x.0 / font_width, character.y.1 / font_height],
-        },
-        Vertex {
-            position: [character.width, character.height, 0.0],
-            tex_coords: [character.x.1 / font_width, character.y.1 / font_height],
-        },
-        Vertex {
-            position: [character.width, 0.0, 0.0],
-            tex_coords: [character.x.1 / font_width, character.y.0 / font_height],
-        },
-    ];
-
-    bytemuck::cast_slice(&vertices).to_vec()
 }

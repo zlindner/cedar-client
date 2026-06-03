@@ -204,9 +204,9 @@ impl ApplicationHandler<RendererEvent> for WindowState {
                     CursorState::Idle,
                     event_loop.create_custom_cursor(
                         CustomCursor::from_rgba(
-                            cursor.data,
-                            cursor.width as u16,
-                            cursor.height as u16,
+                            cursor.image.data,
+                            cursor.image.width as u16,
+                            cursor.image.height as u16,
                             7,
                             7,
                         )

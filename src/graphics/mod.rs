@@ -13,7 +13,13 @@ pub use self::renderer::RendererEvent;
 pub use self::renderer_manager::RendererManager;
 pub use self::sprite::Sprite;
 pub use self::texture::Texture;
+pub use self::{
+    image::ImageAsset,
+    quad::{SourceRect, TexturedQuad},
+};
 
+mod image;
+mod quad;
 mod renderer;
 mod renderer_manager;
 mod sprite;
@@ -82,7 +88,7 @@ impl Uniform {
         let mut model_transform = Similarity3::identity();
         model_transform.prepend_scaling(transform.scale);
 
-        if let Some((x, y)) = texture.origin {
+        if let Some((x, y)) = texture.image.origin {
             model_transform.append_translation(Vec3 {
                 x: -x as f32,
                 y: -y as f32,
