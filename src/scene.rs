@@ -1,10 +1,10 @@
 use crate::{
     component::{Colour, Transform},
     graphics::{
-        ui::{Button, TextInput},
+        ui::{load_button_images, Button, TextInput},
         Sprite,
     },
-    resource::FontDescriptor,
+    resource::{AssetManager, FontDescriptor},
     state::State,
 };
 
@@ -26,65 +26,98 @@ impl Scene for LoginScene {
 // TODO: we might eventually want sprites to be more complex (animations, hiding, etc.), so we may
 // want to create a simple "UiImage" struct or something for these.
 fn init_sprites(state: &mut State) {
-    let main_background = Sprite::new("Map001.nx/Back/login.img/back/11")
-        .with_transform(Transform::from_xyz(400.0, 300.0, 1.0));
+    let sprites = {
+        let mut assets = state
+            .get_resource_mut::<AssetManager>()
+            .expect("AssetManager should exist");
 
-    let side_trees = Sprite::new("Map001.nx/Back/login.img/back/35")
-        .with_transform(Transform::from_xyz(399.0, 260.0, 2.0));
+        vec![
+            Sprite::new(
+                assets
+                    .load_image("Map001.nx/Back/login.img/back/11")
+                    .unwrap(),
+            )
+            .with_transform(Transform::from_xyz(400.0, 300.0, 1.0)),
+            Sprite::new(
+                assets
+                    .load_image("Map001.nx/Back/login.img/back/35")
+                    .unwrap(),
+            )
+            .with_transform(Transform::from_xyz(399.0, 260.0, 2.0)),
+            Sprite::new(
+                assets
+                    .load_image("MapPretty.nx/Back/login.img/ani/16/0")
+                    .unwrap(),
+            )
+            .with_transform(Transform::from_xyz(394.0, 173.0, 2.0)),
+            Sprite::new(
+                assets
+                    .load_image("UI.nx/Login.img/Title/signboard")
+                    .unwrap(),
+            )
+            .with_transform(Transform::from_xyz(391.0, 330.0, 10.0)),
+            Sprite::new(assets.load_image("UI.nx/Login.img/Common/frame").unwrap())
+                .with_transform(Transform::from_xyz(400.0, 300.0, 10.0)),
+        ]
+    };
 
-    let maplestory_logo = Sprite::new("MapPretty.nx/Back/login.img/ani/16/0")
-        .with_transform(Transform::from_xyz(394.0, 173.0, 2.0));
-
-    let signboard = Sprite::new("UI.nx/Login.img/Title/signboard")
-        .with_transform(Transform::from_xyz(391.0, 330.0, 10.0));
-
-    let border = Sprite::new("UI.nx/Login.img/Common/frame")
-        .with_transform(Transform::from_xyz(400.0, 300.0, 10.0));
-
-    state.sprites.push(main_background);
-    state.sprites.push(side_trees);
-    state.sprites.push(maplestory_logo);
-    state.sprites.push(signboard);
-    state.sprites.push(border);
+    state.sprites.extend(sprites);
 }
 
 fn init_buttons(state: &mut State) {
-    let login_button = Button::new("UI.nx/Login.img/Title/BtLogin")
-        .with_transform(Transform::from_xyz(454.0, 279.0, 11.0))
-        .with_on_click(|| log::info!("login"));
+    let buttons = {
+        let mut assets = state
+            .get_resource_mut::<AssetManager>()
+            .expect("AssetManager should exist");
 
-    // TODO: is this supposed to be a checkbox?
-    let save_login_id_button = Button::new("UI.nx/Login.img/Title/BtLoginIDSave")
-        .with_transform(Transform::from_xyz(303.0, 332.0, 11.0))
-        .with_on_click(|| log::info!("save_login_id"));
+        vec![
+            Button::new(load_button_images(
+                &mut assets,
+                "UI.nx/Login.img/Title/BtLogin",
+            ))
+            .with_transform(Transform::from_xyz(454.0, 279.0, 11.0))
+            .with_on_click(|| log::info!("login")),
+            // TODO: is this supposed to be a checkbox?
+            Button::new(load_button_images(
+                &mut assets,
+                "UI.nx/Login.img/Title/BtLoginIDSave",
+            ))
+            .with_transform(Transform::from_xyz(303.0, 332.0, 11.0))
+            .with_on_click(|| log::info!("save_login_id")),
+            Button::new(load_button_images(
+                &mut assets,
+                "UI.nx/Login.img/Title/BtLoginIDLost",
+            ))
+            .with_transform(Transform::from_xyz(375.0, 332.0, 11.0))
+            .with_on_click(|| log::info!("find_login_id")),
+            Button::new(load_button_images(
+                &mut assets,
+                "UI.nx/Login.img/Title/BtPasswdLost",
+            ))
+            .with_transform(Transform::from_xyz(447.0, 332.0, 11.0))
+            .with_on_click(|| log::info!("find_password")),
+            Button::new(load_button_images(
+                &mut assets,
+                "UI.nx/Login.img/Title/BtNew",
+            ))
+            .with_transform(Transform::from_xyz(291.0, 352.0, 11.0))
+            .with_on_click(|| log::info!("join")),
+            Button::new(load_button_images(
+                &mut assets,
+                "UI.nx/Login.img/Title/BtHomePage",
+            ))
+            .with_transform(Transform::from_xyz(363.0, 352.0, 11.0))
+            .with_on_click(|| log::info!("website")),
+            Button::new(load_button_images(
+                &mut assets,
+                "UI.nx/Login.img/Title/BtQuit",
+            ))
+            .with_transform(Transform::from_xyz(435.0, 352.0, 11.0))
+            .with_on_click(|| std::process::exit(0)),
+        ]
+    };
 
-    let find_login_id_button = Button::new("UI.nx/Login.img/Title/BtLoginIDLost")
-        .with_transform(Transform::from_xyz(375.0, 332.0, 11.0))
-        .with_on_click(|| log::info!("find_login_id"));
-
-    let find_password_button = Button::new("UI.nx/Login.img/Title/BtPasswdLost")
-        .with_transform(Transform::from_xyz(447.0, 332.0, 11.0))
-        .with_on_click(|| log::info!("find_password"));
-
-    let join_button = Button::new("UI.nx/Login.img/Title/BtNew")
-        .with_transform(Transform::from_xyz(291.0, 352.0, 11.0))
-        .with_on_click(|| log::info!("join"));
-
-    let website_button = Button::new("UI.nx/Login.img/Title/BtHomePage")
-        .with_transform(Transform::from_xyz(363.0, 352.0, 11.0))
-        .with_on_click(|| log::info!("website"));
-
-    let exit_button = Button::new("UI.nx/Login.img/Title/BtQuit")
-        .with_transform(Transform::from_xyz(435.0, 352.0, 11.0))
-        .with_on_click(|| std::process::exit(0));
-
-    state.buttons.push(login_button);
-    state.buttons.push(save_login_id_button);
-    state.buttons.push(find_login_id_button);
-    state.buttons.push(find_password_button);
-    state.buttons.push(join_button);
-    state.buttons.push(website_button);
-    state.buttons.push(exit_button);
+    state.buttons.extend(buttons);
 }
 
 fn init_text_inputs(state: &mut State) {

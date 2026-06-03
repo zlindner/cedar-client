@@ -1,41 +1,16 @@
-use std::{
-    collections::HashMap,
-    path::Path,
-    sync::{Arc, LazyLock, Mutex},
-};
+use std::{collections::HashMap, path::Path, sync::Arc};
 
 use nx_pkg4::{Node, NxFile};
 
-use crate::{
-    component::Colour,
-    graphics::{ImageAsset, Texture},
-};
+use crate::graphics::{ImageAsset, Texture};
 
 use super::{Font, FontDescriptor};
 
-static NX_FILES: LazyLock<HashMap<String, NxFile>> = LazyLock::new(|| {
-    let mut nx_files = HashMap::new();
-    let paths = std::fs::read_dir("assets/nx").expect("nx folder should exist");
-
-    for path in paths {
-        let file_name = path.unwrap().file_name().into_string().unwrap();
-        let nx_path = format!("assets/nx/{}", file_name);
-        nx_files.insert(file_name, NxFile::open(Path::new(&nx_path)).unwrap());
-    }
-
-    nx_files
-});
-
-static FONTS: LazyLock<HashMap<FontDescriptor, Font>> = LazyLock::new(|| {
-    let mut fonts = HashMap::new();
-
-    // TODO fonts should be keyed by a FontKey, containing font name, size, colour.
-    let descriptor = FontDescriptor::new("Arial", 13, Colour::rgb(255, 255, 255));
-    fonts.insert(descriptor.clone(), Font::load(descriptor));
-    fonts
-});
-
-pub struct AssetManager;
+pub struct AssetManager {
+    nx_files: HashMap<String, NxFile>,
+    images: HashMap<String, Arc<ImageAsset>>,
+    fonts: HashMap<FontDescriptor, Font>,
+}
 
 #[derive(Clone)]
 pub struct ImageHandle {
@@ -48,35 +23,47 @@ impl ImageHandle {
     }
 }
 
-static IMAGES: LazyLock<Mutex<HashMap<String, Arc<ImageAsset>>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
-
 impl AssetManager {
-    pub fn load_image(path: &str) -> Option<ImageHandle> {
-        let mut images = IMAGES.lock().expect("image cache should lock");
+    pub fn new() -> Self {
+        let mut nx_files = HashMap::new();
+        let paths = std::fs::read_dir("assets/nx").expect("nx folder should exist");
 
-        if let Some(image) = images.get(path) {
+        for path in paths {
+            let file_name = path.unwrap().file_name().into_string().unwrap();
+            let nx_path = format!("assets/nx/{}", file_name);
+            nx_files.insert(file_name, NxFile::open(Path::new(&nx_path)).unwrap());
+        }
+
+        Self {
+            nx_files,
+            images: HashMap::new(),
+            fonts: HashMap::new(),
+        }
+    }
+
+    pub fn load_image(&mut self, path: &str) -> Option<ImageHandle> {
+        if let Some(image) = self.images.get(path) {
             return Some(ImageHandle {
                 image: image.clone(),
             });
         }
 
-        let image = Arc::new(Self::load_image_asset(path)?);
-        images.insert(path.to_string(), image.clone());
+        let image = Arc::new(self.load_image_asset(path)?);
+        self.images.insert(path.to_string(), image.clone());
 
         Some(ImageHandle { image })
     }
 
-    pub fn get_texture(path: &str) -> Option<Texture> {
-        let handle = Self::load_image(path)?;
+    pub fn get_texture(&mut self, path: &str) -> Option<Texture> {
+        let handle = self.load_image(path)?;
         Some(Texture::from_image(handle.image()))
     }
 
-    fn load_image_asset(path: &str) -> Option<ImageAsset> {
+    fn load_image_asset(&self, path: &str) -> Option<ImageAsset> {
         log::info!("Getting image for {}", path);
         let (file_name, path) = path.split_at(path.find("/").unwrap());
 
-        let file = match NX_FILES.get(file_name) {
+        let file = match self.nx_files.get(file_name) {
             Some(file) => file,
             None => {
                 log::warn!("{} isn't open", file_name);
@@ -104,8 +91,8 @@ impl AssetManager {
         }
     }
 
-    pub fn get_texture_rgba(path: &str) -> Option<Texture> {
-        let texture = match Self::get_texture(path) {
+    pub fn get_texture_rgba(&mut self, path: &str) -> Option<Texture> {
+        let texture = match self.get_texture(path) {
             Some(texture) => texture,
             None => return None,
         };
@@ -119,7 +106,12 @@ impl AssetManager {
         Some(Texture::from_image_asset(image))
     }
 
-    pub fn get_font(descriptor: &FontDescriptor) -> Option<&'static Font> {
-        FONTS.get(descriptor)
+    pub fn get_font(&mut self, descriptor: &FontDescriptor) -> Option<&Font> {
+        if !self.fonts.contains_key(descriptor) {
+            self.fonts
+                .insert(descriptor.clone(), Font::load(descriptor.clone()));
+        }
+
+        self.fonts.get(descriptor)
     }
 }

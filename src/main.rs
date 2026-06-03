@@ -60,6 +60,7 @@ struct Cedar {
     window: Arc<Window>,
     initial_window_size: winit::dpi::PhysicalSize<u32>,
     initial_scale_factor: f64,
+    asset_manager: Option<AssetManager>,
     state: State,
     systems: Vec<fn(&mut State)>,
     scene: Box<dyn Scene>,
@@ -120,6 +121,11 @@ impl Cedar {
                 logical_window_size.width,
                 logical_window_size.height,
             ))
+            .insert_resource(
+                self.asset_manager
+                    .take()
+                    .expect("AssetManager should only be inserted once"),
+            )
             .insert_resource(Cursor::new())
             .insert_resource(WindowProxy::new(
                 self.initial_window_size,
@@ -197,7 +203,10 @@ impl ApplicationHandler<RendererEvent> for WindowState {
 
                 let (window_tx, window_rx) = mpsc::channel::<GameWindowEvent>();
 
-                let cursor = AssetManager::get_texture_rgba("UI.nx/Basic.img/Cursor/0/0").unwrap();
+                let mut asset_manager = AssetManager::new();
+                let cursor = asset_manager
+                    .get_texture_rgba("UI.nx/Basic.img/Cursor/0/0")
+                    .unwrap();
 
                 let mut custom_cursors = HashMap::new();
                 custom_cursors.insert(
@@ -221,6 +230,7 @@ impl ApplicationHandler<RendererEvent> for WindowState {
                         window: game_window,
                         initial_window_size,
                         initial_scale_factor,
+                        asset_manager: Some(asset_manager),
                         state: State::new(),
                         systems: Vec::new(),
                         scene: Box::new(LoginScene::default()),

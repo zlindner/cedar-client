@@ -17,11 +17,6 @@ impl Colour {
     }
 
     pub fn white() -> Self {
-        Self {
-            red: 255,
-            green: 255,
-            blue: 255,
-            alpha: 255,
-        }
+        Self::rgb(255, 255, 255)
     }
 }

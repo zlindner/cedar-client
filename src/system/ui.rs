@@ -6,7 +6,7 @@ use crate::{
         ui::{ButtonState, Text},
         RenderableV2,
     },
-    resource::AssetManager,
+    resource::{AssetManager, Font},
     state::State,
 };
 
@@ -46,46 +46,70 @@ pub fn button_system(state: &mut State) {
 
 /// System for handling text inputs.
 pub fn text_system(state: &mut State) {
-    for input in state.text_inputs.iter_mut() {
-        // TODO: this should be the font/font size/colour of the input
-        let font = AssetManager::get_font(&input.font_descriptor).unwrap();
+    for index in 0..state.text_inputs.len() {
+        let (font_descriptor, text, input_transform) = {
+            let input = &mut state.text_inputs[index];
 
-        // The input hasn't changed, ex. nothing was typed while focused.
-        if !input.changed {
-            continue;
-        }
-
-        input.changed = false;
-
-        // TODO: we should move all of this logic to the renderer manager.
-        // this system should really only handle updating the input's text, focus, etc.
-        let mut current_pos = 0.0;
-
-        for input_character in input.text.chars() {
-            if input_character.is_whitespace() {
-                // TODO: this should be based on font size.
-                // white_space_size
-                current_pos += 5.0;
+            // The input hasn't changed, ex. nothing was typed while focused.
+            if !input.changed {
                 continue;
             }
 
-            let character = font.characters.get(&input_character).unwrap();
-            let transform = Transform::from_xyz(
-                input.transform.x + current_pos,
-                input.transform.y + font.compute_vertical_offset(character.y.0),
-                input.transform.z,
-            );
+            input.changed = false;
 
-            // TODO: append any x/y padding from input
+            (
+                input.font_descriptor.clone(),
+                input.text.clone(),
+                Transform::from_xyz(input.transform.x, input.transform.y, input.transform.z),
+            )
+        };
 
-            // TODO: this should be based on font size (size_between_char)
-            current_pos = current_pos + character.width + 2.0;
+        let text_items = {
+            let mut assets = state
+                .get_resource_mut::<AssetManager>()
+                .expect("AssetManager should exist");
+            // TODO: this should be the font/font size/colour of the input
+            let font = assets.get_font(&font_descriptor).unwrap();
 
-            let ui_text = Text::new(character, font).with_transform(transform);
+            create_text_items(&text, &input_transform, font)
+        };
 
-            // I'm thinking there should be some shared "text" struct/component that is rendered.
-            // the text component should be able to be rendered by text inputs, and static text (player names, etc.)
-            state.text.push(ui_text);
-        }
+        state.text.extend(text_items);
     }
+}
+
+fn create_text_items(text: &str, input_transform: &Transform, font: &Font) -> Vec<Text> {
+    let mut text_items = Vec::new();
+    // TODO: we should move all of this logic to the renderer manager.
+    // this system should really only handle updating the input's text, focus, etc.
+    let mut current_pos = 0.0;
+
+    for input_character in text.chars() {
+        if input_character.is_whitespace() {
+            // TODO: this should be based on font size.
+            // white_space_size
+            current_pos += 5.0;
+            continue;
+        }
+
+        let character = font.characters.get(&input_character).unwrap();
+        let transform = Transform::from_xyz(
+            input_transform.x + current_pos,
+            input_transform.y + font.compute_vertical_offset(character.y.0),
+            input_transform.z,
+        );
+
+        // TODO: append any x/y padding from input
+
+        // TODO: this should be based on font size (size_between_char)
+        current_pos = current_pos + character.width + 2.0;
+
+        let ui_text = Text::new(character, font).with_transform(transform);
+
+        // I'm thinking there should be some shared "text" struct/component that is rendered.
+        // the text component should be able to be rendered by text inputs, and static text (player names, etc.)
+        text_items.push(ui_text);
+    }
+
+    text_items
 }

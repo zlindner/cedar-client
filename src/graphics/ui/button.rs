@@ -21,8 +21,7 @@ pub struct Button {
 }
 
 impl Button {
-    pub fn new(nx_path: &str) -> Self {
-        let images = load_images(nx_path);
+    pub fn new(images: [Option<ImageHandle>; 4]) -> Self {
         let default_image = images[ButtonState::Default as usize]
             .as_ref()
             .map(ImageHandle::image)
@@ -78,11 +77,11 @@ pub enum ButtonState {
     Disabled = 3,
 }
 
-fn load_images(nx_path: &str) -> [Option<ImageHandle>; 4] {
+pub fn load_button_images(assets: &mut AssetManager, nx_path: &str) -> [Option<ImageHandle>; 4] {
     [
-        AssetManager::load_image(&format!("{}/normal/0", nx_path)),
-        AssetManager::load_image(&format!("{}/pressed/0", nx_path)),
-        AssetManager::load_image(&format!("{}/mouseOver/0", nx_path)),
-        AssetManager::load_image(&format!("{}/disabled/0", nx_path)),
+        assets.load_image(&format!("{}/normal/0", nx_path)),
+        assets.load_image(&format!("{}/pressed/0", nx_path)),
+        assets.load_image(&format!("{}/mouseOver/0", nx_path)),
+        assets.load_image(&format!("{}/disabled/0", nx_path)),
     ]
 }

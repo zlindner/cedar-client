@@ -1,9 +1,6 @@
 use uuid::Uuid;
 
-use crate::{
-    component::Transform,
-    resource::{AssetManager, ImageHandle},
-};
+use crate::{component::Transform, resource::ImageHandle};
 
 use super::{RenderableV2, Texture};
 
@@ -15,10 +12,10 @@ pub struct Sprite {
 }
 
 impl Sprite {
-    pub fn new(nx_path: &str) -> Self {
+    pub fn new(image: ImageHandle) -> Self {
         Self {
             id: Uuid::new_v4(),
-            image: AssetManager::load_image(nx_path).unwrap(),
+            image,
             transform: Transform::default(),
         }
     }
