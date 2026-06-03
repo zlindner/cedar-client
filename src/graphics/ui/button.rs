@@ -54,19 +54,19 @@ impl Button {
 }
 
 impl RenderCommandSource for Button {
-    fn render_command(&self) -> RenderCommand {
+    fn append_render_commands(&self, commands: &mut Vec<RenderCommand>) {
         let image = self.images[self.state as usize].as_ref().unwrap_or(
             self.images[ButtonState::Default as usize]
                 .as_ref()
                 .expect("button should have a default image"),
         );
 
-        RenderCommand {
+        commands.push(RenderCommand {
             id: self.id,
             texture: Texture::from_image(image.image()),
             transform: self.transform,
             layer: self.transform.z as usize,
-        }
+        });
     }
 }
 

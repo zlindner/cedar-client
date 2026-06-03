@@ -27,12 +27,12 @@ impl Sprite {
 }
 
 impl RenderCommandSource for Sprite {
-    fn render_command(&self) -> RenderCommand {
-        RenderCommand {
+    fn append_render_commands(&self, commands: &mut Vec<RenderCommand>) {
+        commands.push(RenderCommand {
             id: self.id,
             texture: Texture::from_image(self.image.image()),
             transform: self.transform,
             layer: self.transform.z as usize,
-        }
+        });
     }
 }

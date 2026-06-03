@@ -43,7 +43,7 @@ pub struct RenderCommand {
 }
 
 pub trait RenderCommandSource {
-    fn render_command(&self) -> RenderCommand;
+    fn append_render_commands(&self, commands: &mut Vec<RenderCommand>);
 }
 
 #[repr(C)]

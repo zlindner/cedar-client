@@ -1,6 +1,12 @@
 use uuid::Uuid;
 
-use crate::{component::Transform, resource::FontDescriptor};
+use crate::{
+    component::Transform,
+    graphics::{RenderCommand, RenderCommandSource},
+    resource::FontDescriptor,
+};
+
+use super::Text;
 
 // TODO: placeholder text?
 // TODO: font size
@@ -17,6 +23,8 @@ pub struct TextInput {
 
     pub font_descriptor: FontDescriptor,
     pub transform: Transform,
+
+    glyphs: Vec<Text>,
 }
 
 impl TextInput {
@@ -29,6 +37,7 @@ impl TextInput {
             text: "TEST123".to_string(),
             changed: true,
             transform: Transform::default(),
+            glyphs: Vec::new(),
         }
     }
 
@@ -40,5 +49,17 @@ impl TextInput {
     pub fn with_transform(mut self, transform: Transform) -> Self {
         self.transform = transform;
         self
+    }
+
+    pub fn set_glyphs(&mut self, glyphs: Vec<Text>) {
+        self.glyphs = glyphs;
+    }
+}
+
+impl RenderCommandSource for TextInput {
+    fn append_render_commands(&self, commands: &mut Vec<RenderCommand>) {
+        for glyph in &self.glyphs {
+            glyph.append_render_commands(commands);
+        }
     }
 }

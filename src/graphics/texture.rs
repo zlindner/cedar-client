@@ -2,7 +2,7 @@ use std::{fmt, sync::Arc};
 
 use crate::{
     graphics::{ImageAsset, SourceRect, TexturedQuad, Vertex},
-    resource::{Font, FontCharacter},
+    resource::FontCharacter,
 };
 
 use super::Renderable;
@@ -23,14 +23,10 @@ impl Texture {
         Self::from_image(Arc::new(image))
     }
 
-    pub fn font(character: &FontCharacter, font: &Font) -> Self {
-        let image = ImageAsset::font(font);
+    pub fn font(character: &FontCharacter, image: Arc<ImageAsset>) -> Self {
         let quad = TexturedQuad::glyph(SourceRect::from(character), image.width, image.height);
 
-        Self {
-            image: Arc::new(image),
-            quad,
-        }
+        Self { image, quad }
     }
 }
 

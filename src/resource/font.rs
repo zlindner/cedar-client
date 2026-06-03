@@ -24,6 +24,18 @@ impl FontDescriptor {
             colour,
         }
     }
+
+    fn texture_key(&self) -> String {
+        format!(
+            "font://{}:{}:{},{},{},{}",
+            self.name,
+            self.size,
+            self.colour.red,
+            self.colour.green,
+            self.colour.blue,
+            self.colour.alpha
+        )
+    }
 }
 
 impl Default for FontDescriptor {
@@ -37,6 +49,7 @@ impl Default for FontDescriptor {
 }
 
 pub struct Font {
+    pub texture_key: String,
     pub data: Vec<u8>,
     pub width: u32,
     pub height: u32,
@@ -46,6 +59,7 @@ pub struct Font {
 
 impl Font {
     pub fn load(descriptor: FontDescriptor) -> Self {
+        let texture_key = descriptor.texture_key();
         let path = format!("assets/fonts/{}.ttf", descriptor.name);
         let mut file = File::open(Path::new(&path)).expect("font should exist in assets/fonts");
         let mut font_bytes = Vec::new();
@@ -111,6 +125,7 @@ impl Font {
         }
 
         Self {
+            texture_key,
             data: image.to_vec(),
             width: glyphs_width + 40,
             height: glyphs_height + 40,

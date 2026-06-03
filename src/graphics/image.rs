@@ -44,7 +44,7 @@ impl ImageAsset {
 
     pub fn font(font: &Font) -> Self {
         Self {
-            path: "font".to_string(),
+            path: font.texture_key.clone(),
             width: font.width,
             height: font.height,
             data: font.data.clone(), // TODO: fix this

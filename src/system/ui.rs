@@ -1,8 +1,13 @@
+use std::sync::Arc;
+
 use winit::event::MouseButton;
 
 use crate::{
     component::Transform,
-    graphics::ui::{ButtonState, Text},
+    graphics::{
+        ui::{ButtonState, Text},
+        ImageAsset,
+    },
     resource::{AssetManager, Font},
     state::State,
 };
@@ -71,12 +76,13 @@ pub fn text_system(state: &mut State) {
             create_text_items(&text, &input_transform, font)
         };
 
-        state.text.extend(text_items);
+        state.text_inputs[index].set_glyphs(text_items);
     }
 }
 
 fn create_text_items(text: &str, input_transform: &Transform, font: &Font) -> Vec<Text> {
     let mut text_items = Vec::new();
+    let atlas = Arc::new(ImageAsset::font(font));
     // TODO: we should move all of this logic to the renderer manager.
     // this system should really only handle updating the input's text, focus, etc.
     let mut current_pos = 0.0;
@@ -89,7 +95,10 @@ fn create_text_items(text: &str, input_transform: &Transform, font: &Font) -> Ve
             continue;
         }
 
-        let character = font.characters.get(&input_character).unwrap();
+        let Some(character) = font.characters.get(&input_character) else {
+            current_pos += 5.0;
+            continue;
+        };
         let transform = Transform::from_xyz(
             input_transform.x + current_pos,
             input_transform.y + font.compute_vertical_offset(character.y.0),
@@ -101,7 +110,7 @@ fn create_text_items(text: &str, input_transform: &Transform, font: &Font) -> Ve
         // TODO: this should be based on font size (size_between_char)
         current_pos = current_pos + character.width + 2.0;
 
-        let ui_text = Text::new(character, font).with_transform(transform);
+        let ui_text = Text::new(character, atlas.clone()).with_transform(transform);
 
         // I'm thinking there should be some shared "text" struct/component that is rendered.
         // the text component should be able to be rendered by text inputs, and static text (player names, etc.)

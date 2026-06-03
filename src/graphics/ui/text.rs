@@ -1,9 +1,11 @@
+use std::sync::Arc;
+
 use uuid::Uuid;
 
 use crate::{
     component::Transform,
-    graphics::{RenderCommand, RenderCommandSource, Texture},
-    resource::{Font, FontCharacter},
+    graphics::{ImageAsset, RenderCommand, RenderCommandSource, Texture},
+    resource::FontCharacter,
 };
 
 #[derive(Debug)]
@@ -14,10 +16,10 @@ pub struct Text {
 }
 
 impl Text {
-    pub fn new(character: &FontCharacter, font: &Font) -> Self {
+    pub fn new(character: &FontCharacter, atlas: Arc<ImageAsset>) -> Self {
         Self {
             id: Uuid::new_v4(),
-            texture: Texture::font(character, font),
+            texture: Texture::font(character, atlas),
             transform: Transform::default(),
         }
     }
@@ -29,12 +31,12 @@ impl Text {
 }
 
 impl RenderCommandSource for Text {
-    fn render_command(&self) -> RenderCommand {
-        RenderCommand {
+    fn append_render_commands(&self, commands: &mut Vec<RenderCommand>) {
+        commands.push(RenderCommand {
             id: self.id,
             texture: self.texture.clone(),
             transform: self.transform,
             layer: self.transform.z as usize,
-        }
+        });
     }
 }

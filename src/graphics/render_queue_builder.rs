@@ -42,9 +42,17 @@ impl RenderQueueBuilder {
     fn get_render_commands(&self, state: &State) -> Vec<RenderCommand> {
         let mut commands = Vec::new();
 
-        commands.extend(state.sprites.iter().map(|sprite| sprite.render_command()));
-        commands.extend(state.buttons.iter().map(|button| button.render_command()));
-        commands.extend(state.text.iter().map(|text| text.render_command()));
+        for sprite in &state.sprites {
+            sprite.append_render_commands(&mut commands);
+        }
+
+        for button in &state.buttons {
+            button.append_render_commands(&mut commands);
+        }
+
+        for text_input in &state.text_inputs {
+            text_input.append_render_commands(&mut commands);
+        }
 
         commands
     }
