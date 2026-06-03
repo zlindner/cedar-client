@@ -12,8 +12,8 @@ use scene::{LoginScene, Scene};
 use state::State;
 use winit::{
     application::ApplicationHandler,
-    dpi::LogicalSize,
-    event::WindowEvent,
+    dpi::{LogicalPosition, LogicalSize},
+    event::{ElementState, MouseButton, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     window::{CustomCursor, Window, WindowId},
 };
@@ -25,22 +25,45 @@ mod scene;
 mod state;
 mod system;
 
+const VIRTUAL_WIDTH: f32 = 800.0;
+const VIRTUAL_HEIGHT: f32 = 600.0;
+
 enum WindowState {
     Uninitialized,
     Initialized(WindowManager),
 }
 
 struct WindowManager {
-    sender: mpsc::Sender<WindowEvent>,
+    window: Arc<Window>,
+    sender: mpsc::Sender<GameWindowEvent>,
+    logical_width: f32,
+    logical_height: f32,
+}
+
+enum GameWindowEvent {
+    CursorMoved {
+        x: f64,
+        y: f64,
+    },
+    MouseInput {
+        button: MouseButton,
+        state: ElementState,
+    },
+    Resized {
+        physical_size: winit::dpi::PhysicalSize<u32>,
+        scale_factor: f64,
+    },
 }
 
 struct Cedar {
     window: Arc<Window>,
+    initial_window_size: winit::dpi::PhysicalSize<u32>,
+    initial_scale_factor: f64,
     state: State,
     systems: Vec<fn(&mut State)>,
     scene: Box<dyn Scene>,
     renderer_tx: mpsc::Sender<RendererEvent>,
-    window_rx: mpsc::Receiver<WindowEvent>,
+    window_rx: mpsc::Receiver<GameWindowEvent>,
     custom_cursors: HashMap<CursorState, CustomCursor>,
 }
 
@@ -88,9 +111,8 @@ impl Cedar {
 
     fn init(&mut self) {
         let logical_window_size = self
-            .window
-            .inner_size()
-            .to_logical(self.window.scale_factor());
+            .initial_window_size
+            .to_logical(self.initial_scale_factor);
 
         self.state
             .insert_resource(Camera::new(
@@ -99,8 +121,8 @@ impl Cedar {
             ))
             .insert_resource(Cursor::new())
             .insert_resource(WindowProxy::new(
-                self.window.inner_size(),
-                self.window.scale_factor(),
+                self.initial_window_size,
+                self.initial_scale_factor,
             ));
 
         self.systems.push(system::ui::button_system);
@@ -114,27 +136,22 @@ impl Cedar {
     fn handle_window_events(&self) {
         while let Ok(event) = self.window_rx.try_recv() {
             match event {
-                WindowEvent::CursorMoved { position, .. } => {
-                    // Since `position` is a `PhysicalPosition`, we need to apply the current scale
-                    // factor to get the `LogicalPosition`.
-                    let scale_factor = self.state.window().scale_factor;
-                    self.state
-                        .cursor()
-                        .set_position(position.x / scale_factor, position.y / scale_factor);
+                GameWindowEvent::CursorMoved { x, y } => {
+                    self.state.cursor().set_position(x, y);
                 }
-                WindowEvent::MouseInput { button, state, .. } => {
+                GameWindowEvent::MouseInput { button, state } => {
                     self.state.cursor().add_event(button, state);
                 }
-                WindowEvent::Resized(new_size) => {
-                    if let Err(e) = self.renderer_tx.send(RendererEvent::Resize(new_size)) {
+                GameWindowEvent::Resized {
+                    physical_size,
+                    scale_factor,
+                } => {
+                    if let Err(e) = self.renderer_tx.send(RendererEvent::Resize(physical_size)) {
                         log::error!("Error sending resize event to renderer: {}", e);
                     }
 
-                    self.state
-                        .window()
-                        .resize(new_size, self.window.scale_factor());
+                    self.state.window().resize(physical_size, scale_factor);
                 }
-                _ => {}
             }
         }
     }
@@ -183,7 +200,11 @@ impl ApplicationHandler for WindowState {
                 // NOTE: creating the renderer must be done on the main thread.
                 thread::spawn(move || renderer.run());
 
-                let (window_tx, window_rx) = mpsc::channel::<WindowEvent>();
+                let initial_window_size = window.inner_size();
+                let initial_scale_factor = window.scale_factor();
+                let initial_logical_size = initial_window_size.to_logical(initial_scale_factor);
+
+                let (window_tx, window_rx) = mpsc::channel::<GameWindowEvent>();
 
                 let cursor = AssetManager::get_texture_rgba("UI.nx/Basic.img/Cursor/0/0").unwrap();
 
@@ -203,21 +224,29 @@ impl ApplicationHandler for WindowState {
                 );
 
                 // Create and run the main game loop.
+                let game_window = window.clone();
                 thread::spawn(move || {
                     let cedar = Cedar {
-                        window: window.clone(),
+                        window: game_window,
+                        initial_window_size,
+                        initial_scale_factor,
                         state: State::new(),
                         systems: Vec::new(),
                         scene: Box::new(LoginScene::default()),
                         renderer_tx,
-                        window_rx: window_rx,
+                        window_rx,
                         custom_cursors,
                     };
 
                     cedar.run();
                 });
 
-                let manager = WindowManager { sender: window_tx };
+                let manager = WindowManager {
+                    window: window.clone(),
+                    sender: window_tx,
+                    logical_width: initial_logical_size.width,
+                    logical_height: initial_logical_size.height,
+                };
                 *self = WindowState::Initialized(manager);
             }
             WindowState::Initialized(_) => return,
@@ -239,11 +268,43 @@ impl ApplicationHandler for WindowState {
             WindowEvent::CloseRequested => {
                 event_loop.exit();
             }
-            e => {
-                if let Err(e) = manager.sender.send(e) {
+            WindowEvent::CursorMoved { position, .. } => {
+                let logical_position: LogicalPosition<f64> =
+                    position.to_logical(manager.window.scale_factor());
+                let virtual_x =
+                    logical_position.x * f64::from(VIRTUAL_WIDTH / manager.logical_width);
+                let virtual_y =
+                    logical_position.y * f64::from(VIRTUAL_HEIGHT / manager.logical_height);
+
+                if let Err(e) = manager.sender.send(GameWindowEvent::CursorMoved {
+                    x: virtual_x,
+                    y: virtual_y,
+                }) {
                     log::error!("Error sending window event: {}", e);
                 }
             }
+            WindowEvent::MouseInput { button, state, .. } => {
+                if let Err(e) = manager
+                    .sender
+                    .send(GameWindowEvent::MouseInput { button, state })
+                {
+                    log::error!("Error sending window event: {}", e);
+                }
+            }
+            WindowEvent::Resized(physical_size) => {
+                let scale_factor = manager.window.scale_factor();
+                let logical_size = physical_size.to_logical(scale_factor);
+                manager.logical_width = logical_size.width;
+                manager.logical_height = logical_size.height;
+
+                if let Err(e) = manager.sender.send(GameWindowEvent::Resized {
+                    physical_size,
+                    scale_factor,
+                }) {
+                    log::error!("Error sending window event: {}", e);
+                }
+            }
+            _ => {}
         }
     }
 }

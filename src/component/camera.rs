@@ -10,14 +10,22 @@ pub struct Camera {
 
 impl Camera {
     pub fn new(width: f32, height: f32) -> Self {
-        Self {
+        let mut camera = Self {
             left: 0.,
-            right: width,
+            right: 0.,
             top: 0.,
-            bottom: -1. * height,
+            bottom: 0.,
             near: 0.0,
             far: 100.,
             dpi: 1.0,
-        }
+        };
+
+        camera.resize(width, height);
+        camera
+    }
+
+    pub fn resize(&mut self, width: f32, height: f32) {
+        self.right = width;
+        self.bottom = -height;
     }
 }

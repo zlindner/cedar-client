@@ -12,7 +12,6 @@ use winit::{dpi::PhysicalSize, window::Window};
 use super::{Renderable, Texture, Uniform};
 
 pub struct Renderer {
-    window: Arc<Window>,
     receiver: mpsc::Receiver<RendererEvent>,
 
     surface: wgpu::Surface<'static>,
@@ -28,7 +27,7 @@ pub struct Renderer {
     vertex_buffers: HashMap<Uuid, wgpu::Buffer>,
     index_buffers: HashMap<Uuid, wgpu::Buffer>,
 
-    transform_bind_groups: HashMap<Uuid, (wgpu::BindGroup)>,
+    transform_bind_groups: HashMap<Uuid, wgpu::BindGroup>,
     texture_bind_groups: HashMap<String, (wgpu::BindGroup, wgpu::Texture)>,
 }
 
@@ -108,7 +107,6 @@ impl Renderer {
             });
 
         Self {
-            window,
             receiver,
             surface,
             device,
@@ -136,7 +134,7 @@ impl Renderer {
                         match self.render(items) {
                             Ok(_) => {}
                             Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
-                                self.resize(self.window.inner_size());
+                                self.configure_surface();
                             }
                             Err(wgpu::SurfaceError::OutOfMemory) => {
                                 log::error!("System is out of memory, exiting");
@@ -282,9 +280,12 @@ impl Renderer {
             self.config.width = new_size.width;
             self.config.height = new_size.height;
 
-            // FIXME: this only works on the main thread
-            self.surface.configure(&self.device, &self.config);
+            self.configure_surface();
         }
+    }
+
+    fn configure_surface(&mut self) {
+        self.surface.configure(&self.device, &self.config);
     }
 
     pub fn register_render_pipeline<T>(&mut self)
