@@ -1,4 +1,10 @@
-use std::{collections::HashMap, iter, ops::Range, sync::Arc};
+use std::{
+    collections::HashMap,
+    iter,
+    ops::Range,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use uuid::Uuid;
 use wgpu::util::DeviceExt;
@@ -22,6 +28,8 @@ pub struct Renderer {
 
     transform_bind_groups: HashMap<Uuid, wgpu::BindGroup>,
     texture_bind_groups: HashMap<String, (wgpu::BindGroup, wgpu::Texture)>,
+
+    stats: RenderStats,
 }
 
 impl Renderer {
@@ -111,6 +119,7 @@ impl Renderer {
             index_buffers: HashMap::new(),
             transform_bind_groups: HashMap::new(),
             texture_bind_groups: HashMap::new(),
+            stats: RenderStats::new(),
         };
 
         renderer.register_render_pipeline::<Texture>();
@@ -120,10 +129,12 @@ impl Renderer {
     pub fn handle_event(&mut self, event: RendererEvent) {
         match event {
             RendererEvent::Render(updates, items) => {
+                let started_at = Instant::now();
+                self.stats.record_render_request();
                 self.process_updates(updates);
 
                 match self.render(items) {
-                    Ok(_) => {}
+                    Ok(_) => self.stats.record_presented_frame(started_at.elapsed()),
                     Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
                         self.configure_surface();
                     }
@@ -136,6 +147,8 @@ impl Renderer {
                         log::warn!("Frame took longer than expected to render");
                     }
                 }
+
+                self.stats.log_if_due();
             }
         }
     }
@@ -356,6 +369,62 @@ impl Renderer {
 
         self.texture_bind_groups
             .insert(path, (texture_bind_group, wgpu_texture));
+    }
+}
+
+struct RenderStats {
+    render_requests: u32,
+    presented_frames: u32,
+    total_render_duration: Duration,
+    longest_render_duration: Duration,
+    last_report_at: Instant,
+}
+
+impl RenderStats {
+    fn new() -> Self {
+        Self {
+            render_requests: 0,
+            presented_frames: 0,
+            total_render_duration: Duration::ZERO,
+            longest_render_duration: Duration::ZERO,
+            last_report_at: Instant::now(),
+        }
+    }
+
+    fn record_render_request(&mut self) {
+        self.render_requests += 1;
+    }
+
+    fn record_presented_frame(&mut self, render_duration: Duration) {
+        self.presented_frames += 1;
+        self.total_render_duration += render_duration;
+        self.longest_render_duration = self.longest_render_duration.max(render_duration);
+    }
+
+    fn log_if_due(&mut self) {
+        if self.last_report_at.elapsed() < Duration::from_secs(1) {
+            return;
+        }
+
+        let average_render_ms = if self.presented_frames == 0 {
+            0.0
+        } else {
+            self.total_render_duration.as_secs_f64() * 1000.0 / f64::from(self.presented_frames)
+        };
+
+        log::info!(
+            "fps {}, requests {}, avg {:.2}ms, max {:.2}ms",
+            self.presented_frames,
+            self.render_requests,
+            average_render_ms,
+            self.longest_render_duration.as_secs_f64() * 1000.0,
+        );
+
+        self.render_requests = 0;
+        self.presented_frames = 0;
+        self.total_render_duration = Duration::ZERO;
+        self.longest_render_duration = Duration::ZERO;
+        self.last_report_at = Instant::now();
     }
 }
 

@@ -76,11 +76,10 @@ impl Cedar {
         let mut renderer_manager = RendererManager::new(self.renderer_tx.clone());
 
         let mut limiter = FrameLimiter::new(60);
-        let mut rendered_frames = 0;
-        let mut rendered_frames_tracker = Instant::now();
-
         loop {
-            if limiter.ready_for_update() {
+            let now = Instant::now();
+
+            if limiter.ready_for_update(now) {
                 self.handle_window_events();
 
                 for system in self.systems.iter() {
@@ -88,26 +87,21 @@ impl Cedar {
                 }
 
                 self.update_cursor_icon();
-                limiter.last_update_start = Instant::now();
+                limiter.mark_update_finished(Instant::now());
             }
 
-            if limiter.ready_for_frame() {
+            let now = Instant::now();
+
+            if limiter.ready_for_frame(now) {
                 renderer_manager.generate_and_send_events(&mut self.state);
 
-                limiter.last_frame_start = Instant::now();
-                rendered_frames += 1;
+                limiter.mark_frame_finished(Instant::now());
             }
 
-            if rendered_frames_tracker.elapsed() >= Duration::from_secs(1) {
-                log::info!("rendered {} frames!", rendered_frames);
-                rendered_frames = 0;
-                rendered_frames_tracker = Instant::now();
+            match limiter.sleep_duration(Instant::now()) {
+                Some(duration) => thread::sleep(duration),
+                None => thread::yield_now(),
             }
-
-            // TODO: we should figure out the right sleep here based on frame rate.
-            // Sleeping for the exact tick duration basically means it's impossible to reach our
-            // target frame rate. We might need to sleep for tick duration - loop iteration duration.
-            thread::sleep(limiter.tick_duration);
         }
     }
 
@@ -338,29 +332,53 @@ fn main() {
 }
 
 struct FrameLimiter {
-    tick_duration: Duration,
     target_update_duration: Duration,
-    last_update_start: Instant,
+    next_update_at: Instant,
     target_frame_duration: Duration,
-    last_frame_start: Instant,
+    next_frame_at: Instant,
 }
 
 impl FrameLimiter {
     pub fn new(target_fps: u32) -> Self {
+        let now = Instant::now();
+        let target_duration = Duration::from_secs(1) / target_fps;
+
         Self {
-            tick_duration: Duration::from_secs(1) / 120,
-            target_update_duration: Duration::from_secs(1) / target_fps,
-            last_update_start: Instant::now(),
-            target_frame_duration: Duration::from_secs(1) / target_fps,
-            last_frame_start: Instant::now(),
+            target_update_duration: target_duration,
+            next_update_at: now + target_duration,
+            target_frame_duration: target_duration,
+            next_frame_at: now + target_duration,
         }
     }
 
-    pub fn ready_for_update(&self) -> bool {
-        Instant::now() - self.last_update_start > self.target_update_duration
+    pub fn ready_for_update(&self, now: Instant) -> bool {
+        now >= self.next_update_at
     }
 
-    pub fn ready_for_frame(&self) -> bool {
-        Instant::now() - self.last_frame_start > self.target_frame_duration
+    pub fn ready_for_frame(&self, now: Instant) -> bool {
+        now >= self.next_frame_at
+    }
+
+    pub fn mark_update_finished(&mut self, now: Instant) {
+        self.next_update_at = next_deadline(self.next_update_at, self.target_update_duration, now);
+    }
+
+    pub fn mark_frame_finished(&mut self, now: Instant) {
+        self.next_frame_at = next_deadline(self.next_frame_at, self.target_frame_duration, now);
+    }
+
+    pub fn sleep_duration(&self, now: Instant) -> Option<Duration> {
+        let next_deadline = self.next_update_at.min(self.next_frame_at);
+        next_deadline.checked_duration_since(now)
+    }
+}
+
+fn next_deadline(mut deadline: Instant, target_duration: Duration, now: Instant) -> Instant {
+    deadline += target_duration;
+
+    if deadline <= now {
+        now + target_duration
+    } else {
+        deadline
     }
 }
