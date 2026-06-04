@@ -32,6 +32,8 @@ impl Scene for GameScene {
     }
 }
 
+const GAME_STATUS_BAR_Y: f32 = 480.0;
+
 // TODO: we might eventually want sprites to be more complex (animations, hiding, etc.), so we may
 // want to create a simple "UiImage" struct or something for these.
 fn init_sprites(state: &mut State) {
@@ -246,7 +248,7 @@ fn init_game_status_bar(state: &mut State) {
             25.0,
         );
 
-        let button_pos = Transform::from_xyz(591.0, 73.0, 30.0);
+        let button_pos = status_bar_transform(591.0, 73.0, 30.0);
         let mut buttons = Vec::new();
         push_button(
             &mut buttons,
@@ -311,7 +313,13 @@ fn push_sprite(
         return;
     };
 
-    sprites.push(Sprite::new(image).with_transform(Transform::from_xyz(x, y, z)));
+    sprites.push(
+        Sprite::new(image).with_transform(status_bar_transform(x, y, z)),
+    );
+}
+
+fn status_bar_transform(x: f32, y: f32, z: f32) -> Transform {
+    Transform::from_xyz(x, GAME_STATUS_BAR_Y + y, z)
 }
 
 fn push_button(
