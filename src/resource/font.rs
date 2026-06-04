@@ -69,7 +69,11 @@ impl Font {
 
         let font = FontVec::try_from_vec(font_bytes).unwrap();
         let font = ab_glyph::Font::as_scaled(&font, PxScale::from(descriptor.size as f32));
-        let whitespace_advance = font.h_advance(font.scaled_glyph(WHITESPACE).id).floor();
+        // MapleStory v83-style UI text is very sensitive at 11-13px. HeavenClient uses
+        // FreeType with hinted integer advances; ab_glyph does not match that exactly.
+        // If text keeps looking too soft/tight, consider moving font atlas generation to
+        // FreeType so rasterization, bitmap bearings, and advances match the reference client.
+        let whitespace_advance = font.h_advance(font.scaled_glyph(WHITESPACE).id).round();
 
         let mut glyphs: Vec<Glyph> = Vec::new();
         let mut caret = point(0.0, font.ascent());
@@ -123,7 +127,7 @@ impl Font {
                     FontCharacter::new(
                         (bounds.min.x, bounds.max.x),
                         (bounds.min.y, bounds.max.y),
-                        font.h_advance(font.scaled_glyph(character).id).floor(),
+                        font.h_advance(font.scaled_glyph(character).id).round(),
                         bounds.min.x - glyph_position.x,
                         glyph_position.y - bounds.min.y,
                     ),
