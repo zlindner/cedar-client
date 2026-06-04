@@ -77,7 +77,7 @@ impl Vertex {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Copy, Clone, Debug, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Uniform {
     pub model_transform: [[f32; 4]; 4],
     pub camera_view: [[f32; 4]; 4],

@@ -1,6 +1,6 @@
 use std::{collections::HashMap, path::Path, sync::Arc};
 
-use nx_pkg4::{Node, NxFile};
+use nx_pkg4::{Node, NxFile, NxNode};
 
 use crate::graphics::{ImageAsset, Texture};
 
@@ -57,6 +57,14 @@ impl AssetManager {
     pub fn get_texture(&mut self, path: &str) -> Option<Texture> {
         let handle = self.load_image(path)?;
         Some(Texture::from_image(handle.image()))
+    }
+
+    pub fn with_node<R>(&self, path: &str, f: impl FnOnce(NxNode<'_>) -> R) -> Option<R> {
+        let (file_name, path) = path.split_at(path.find("/")?);
+        let file = self.nx_files.get(file_name)?;
+        let root = file.root();
+        let node = root.get(&path[1..path.len()])?;
+        Some(f(node))
     }
 
     fn load_image_asset(&self, path: &str) -> Option<ImageAsset> {

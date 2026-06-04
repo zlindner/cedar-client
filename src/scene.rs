@@ -7,6 +7,7 @@ use crate::{
     resource::{AssetManager, FontDescriptor},
     state::State,
 };
+use nx_pkg4::{Node, NxNode};
 
 pub trait Scene {
     fn init(&mut self, _state: &mut State) {}
@@ -28,11 +29,22 @@ pub struct GameScene;
 
 impl Scene for GameScene {
     fn init(&mut self, state: &mut State) {
+        init_test_map(state);
         init_game_status_bar(state);
     }
 }
 
+const TEST_MAP_ID: i32 = 100000000;
+const TEST_MAP_VIEW_X: f32 = -3600.0;
+const TEST_MAP_VIEW_Y: f32 = 0.0;
 const GAME_STATUS_BAR_Y: f32 = 480.0;
+
+struct MapSpriteSpec {
+    path: String,
+    x: f32,
+    y: f32,
+    z: f32,
+}
 
 // TODO: we might eventually want sprites to be more complex (animations, hiding, etc.), so we may
 // want to create a simple "UiImage" struct or something for these.
@@ -146,6 +158,174 @@ fn init_text_inputs(state: &mut State) {
 
     state.text_inputs.push(username_input);
     state.text_inputs.push(password_input);
+}
+
+fn init_test_map(state: &mut State) {
+    let sprites = {
+        let mut assets = state
+            .get_resource_mut::<AssetManager>()
+            .expect("AssetManager should exist");
+
+        let specs = collect_test_map_sprite_specs(&assets);
+        let mut sprites = Vec::new();
+
+        for spec in specs {
+            let Some(image) = assets.load_image(&spec.path) else {
+                log::warn!("Skipping missing map sprite {}", spec.path);
+                continue;
+            };
+
+            sprites.push(Sprite::new(image).with_transform(Transform::from_xyz(
+                spec.x + TEST_MAP_VIEW_X,
+                spec.y + TEST_MAP_VIEW_Y,
+                spec.z,
+            )));
+        }
+
+        sprites
+    };
+
+    state.sprites.extend(sprites);
+}
+
+fn collect_test_map_sprite_specs(assets: &AssetManager) -> Vec<MapSpriteSpec> {
+    let map_path = map_node_path(TEST_MAP_ID);
+    let Some(specs) = assets.with_node(&map_path, |map| {
+        let mut specs = Vec::new();
+        collect_background_specs(map, &mut specs);
+        collect_layer_specs(map, &mut specs);
+        specs
+    }) else {
+        log::warn!("Missing test map {}", map_path);
+        return Vec::new();
+    };
+
+    specs
+}
+
+fn collect_background_specs(map: NxNode, specs: &mut Vec<MapSpriteSpec>) {
+    let Some(back) = map.get("back") else {
+        return;
+    };
+    let Ok(backgrounds) = back.iter() else {
+        return;
+    };
+
+    for background in backgrounds {
+        let Some(background_set) = node_string(background, "bS") else {
+            continue;
+        };
+        let no = node_integer(background, "no").unwrap_or_default();
+        let x = node_integer(background, "x").unwrap_or_default() as f32;
+        let y = node_integer(background, "y").unwrap_or_default() as f32;
+        let front = node_integer(background, "front").unwrap_or_default() != 0;
+        let frame_group = if node_integer(background, "ani").unwrap_or_default() == 0 {
+            "back"
+        } else {
+            "ani"
+        };
+
+        specs.push(MapSpriteSpec {
+            path: format!("Map.nx/Back/{}.img/{}/{}", background_set, frame_group, no),
+            x,
+            y,
+            z: if front { 19.0 } else { 0.0 },
+        });
+    }
+}
+
+fn collect_layer_specs(map: NxNode, specs: &mut Vec<MapSpriteSpec>) {
+    for layer in 0..8 {
+        let Some(layer_node) = map.get(&layer.to_string()) else {
+            continue;
+        };
+
+        collect_obj_specs(layer_node, layer, specs);
+        collect_tile_specs(layer_node, layer, specs);
+    }
+}
+
+fn collect_obj_specs(layer_node: NxNode, layer: i32, specs: &mut Vec<MapSpriteSpec>) {
+    let Some(objs) = layer_node.get("obj") else {
+        return;
+    };
+    let Ok(objs) = objs.iter() else {
+        return;
+    };
+
+    for obj in objs {
+        let Some(object_set) = node_string(obj, "oS") else {
+            continue;
+        };
+        let Some(layer_0) = node_string(obj, "l0") else {
+            continue;
+        };
+        let Some(layer_1) = node_string(obj, "l1") else {
+            continue;
+        };
+        let Some(layer_2) = node_string(obj, "l2") else {
+            continue;
+        };
+
+        specs.push(MapSpriteSpec {
+            path: format!(
+                "Map.nx/Obj/{}.img/{}/{}/{}/0",
+                object_set, layer_0, layer_1, layer_2
+            ),
+            x: node_integer(obj, "x").unwrap_or_default() as f32,
+            y: node_integer(obj, "y").unwrap_or_default() as f32,
+            z: map_layer_z(layer, node_integer(obj, "z").unwrap_or_default()),
+        });
+    }
+}
+
+fn collect_tile_specs(layer_node: NxNode, layer: i32, specs: &mut Vec<MapSpriteSpec>) {
+    let Some(tile_set) = layer_node
+        .get("info")
+        .and_then(|info| node_string(info, "tS"))
+    else {
+        return;
+    };
+    let Some(tiles) = layer_node.get("tile") else {
+        return;
+    };
+    let Ok(tiles) = tiles.iter() else {
+        return;
+    };
+
+    for tile in tiles {
+        let Some(tile_group) = node_string(tile, "u") else {
+            continue;
+        };
+        let no = node_integer(tile, "no").unwrap_or_default();
+
+        specs.push(MapSpriteSpec {
+            path: format!("Map.nx/Tile/{}.img/{}/{}", tile_set, tile_group, no),
+            x: node_integer(tile, "x").unwrap_or_default() as f32,
+            y: node_integer(tile, "y").unwrap_or_default() as f32,
+            z: map_layer_z(layer, node_integer(tile, "zM").unwrap_or_default()),
+        });
+    }
+}
+
+fn map_node_path(map_id: i32) -> String {
+    format!(
+        "Map.nx/Map/Map{}/{}.img",
+        map_id / 100000000,
+        format!("{:09}", map_id)
+    )
+}
+
+fn map_layer_z(layer: i32, z: i64) -> f32 {
+    1.0 + layer as f32 * 2.0 + z as f32 / 100.0
+}
+
+fn node_integer(node: NxNode, child: &str) -> Option<i64> {
+    node.get(child).integer().ok().flatten()
+}
+
+fn node_string(node: NxNode, child: &str) -> Option<String> {
+    node.get(child).string().ok().flatten().map(str::to_string)
 }
 
 fn init_game_status_bar(state: &mut State) {
@@ -313,9 +493,7 @@ fn push_sprite(
         return;
     };
 
-    sprites.push(
-        Sprite::new(image).with_transform(status_bar_transform(x, y, z)),
-    );
+    sprites.push(Sprite::new(image).with_transform(status_bar_transform(x, y, z)));
 }
 
 fn status_bar_transform(x: f32, y: f32, z: f32) -> Transform {
