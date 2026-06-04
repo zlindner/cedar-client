@@ -7,7 +7,7 @@ use std::{
 
 use component::Camera;
 use graphics::{RenderQueueBuilder, Renderer, RendererEvent};
-use resource::{input::CursorState, AssetManager, Cursor, WindowProxy};
+use resource::{input::CursorState, AssetManager, Cursor, Keyboard, WindowProxy};
 use scene::{LoginScene, Scene};
 use state::State;
 use winit::{
@@ -15,6 +15,7 @@ use winit::{
     dpi::{LogicalPosition, LogicalSize},
     event::{ElementState, MouseButton, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy},
+    keyboard::{Key, NamedKey},
     window::{CustomCursor, Window, WindowId},
 };
 
@@ -50,6 +51,12 @@ enum GameWindowEvent {
         button: MouseButton,
         state: ElementState,
     },
+    TextInput {
+        text: String,
+    },
+    Backspace,
+    Tab,
+    Enter,
     Resized {
         physical_size: winit::dpi::PhysicalSize<u32>,
         scale_factor: f64,
@@ -121,13 +128,16 @@ impl Cedar {
                     .expect("AssetManager should only be inserted once"),
             )
             .insert_resource(Cursor::new())
+            .insert_resource(Keyboard::new())
             .insert_resource(WindowProxy::new(
                 self.initial_window_size,
                 self.initial_scale_factor,
             ));
 
         self.systems.push(system::ui::button_system);
+        self.systems.push(system::ui::text_input_system);
         self.systems.push(system::ui::text_system);
+        self.systems.push(system::ui::clear_input_events_system);
 
         self.scene.init(&mut self.state);
     }
@@ -142,6 +152,18 @@ impl Cedar {
                 }
                 GameWindowEvent::MouseInput { button, state } => {
                     self.state.cursor().add_event(button, state);
+                }
+                GameWindowEvent::TextInput { text } => {
+                    self.state.keyboard().add_text(&text);
+                }
+                GameWindowEvent::Backspace => {
+                    self.state.keyboard().add_backspace();
+                }
+                GameWindowEvent::Tab => {
+                    self.state.keyboard().add_tab();
+                }
+                GameWindowEvent::Enter => {
+                    self.state.keyboard().add_enter();
                 }
                 GameWindowEvent::Resized {
                     physical_size,
@@ -285,6 +307,39 @@ impl ApplicationHandler<RendererEvent> for WindowState {
                     .send(GameWindowEvent::MouseInput { button, state })
                 {
                     log::error!("Error sending window event: {}", e);
+                }
+            }
+            WindowEvent::KeyboardInput { event, .. } => {
+                if event.state != ElementState::Pressed {
+                    return;
+                }
+
+                match event.logical_key {
+                    Key::Named(NamedKey::Backspace) => {
+                        if let Err(e) = manager.sender.send(GameWindowEvent::Backspace) {
+                            log::error!("Error sending window event: {}", e);
+                        }
+                    }
+                    Key::Named(NamedKey::Tab) => {
+                        if let Err(e) = manager.sender.send(GameWindowEvent::Tab) {
+                            log::error!("Error sending window event: {}", e);
+                        }
+                    }
+                    Key::Named(NamedKey::Enter) => {
+                        if let Err(e) = manager.sender.send(GameWindowEvent::Enter) {
+                            log::error!("Error sending window event: {}", e);
+                        }
+                    }
+                    _ => {
+                        if let Some(text) = event.text {
+                            if let Err(e) = manager
+                                .sender
+                                .send(GameWindowEvent::TextInput { text: text.into() })
+                            {
+                                log::error!("Error sending window event: {}", e);
+                            }
+                        }
+                    }
                 }
             }
             WindowEvent::Resized(physical_size) => {

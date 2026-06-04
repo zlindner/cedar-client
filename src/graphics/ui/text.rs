@@ -60,23 +60,19 @@ impl TextLayout {
         let mut layout = Self::empty();
         let atlas = Arc::new(ImageAsset::font(font));
         let mut current_pos = 0.0;
-        let mut previous_character = None;
 
         layout.height = font.line_height;
 
         for input_character in text.chars() {
-            current_pos += font.kerning(previous_character, input_character);
-
             let Some(character) = font.characters.get(&input_character) else {
                 current_pos += font.advance(input_character);
                 layout.width = layout.width.max(current_pos);
-                previous_character = Some(input_character);
                 continue;
             };
 
             let transform = Transform::from_xyz(
-                origin.x + current_pos,
-                origin.y + font.compute_vertical_offset(character.y.0),
+                origin.x + current_pos + character.left_bearing,
+                origin.y + font.line_height - character.top_bearing,
                 origin.z,
             );
 
@@ -86,7 +82,6 @@ impl TextLayout {
 
             current_pos += character.advance;
             layout.width = layout.width.max(current_pos);
-            previous_character = Some(input_character);
         }
 
         layout

@@ -82,10 +82,80 @@ impl Cursor {
     pub fn is_button_pressed(&self, button: MouseButton) -> bool {
         self.pressed_buttons.contains(&button)
     }
+
+    pub fn was_button_pressed(&self, button: MouseButton) -> bool {
+        self.events
+            .iter()
+            .any(|(event_button, state)| *event_button == button && *state == ElementState::Pressed)
+    }
+
+    pub fn clear_events(&mut self) {
+        self.events.clear();
+    }
 }
 
 #[derive(Debug, Hash, Eq, PartialEq)]
 pub enum CursorState {
     Idle,
     Hidden,
+}
+
+pub struct Keyboard {
+    text: String,
+    backspaces: usize,
+    tab_pressed: bool,
+    enter_pressed: bool,
+}
+
+impl Keyboard {
+    pub fn new() -> Self {
+        Self {
+            text: String::new(),
+            backspaces: 0,
+            tab_pressed: false,
+            enter_pressed: false,
+        }
+    }
+
+    pub fn add_text(&mut self, text: &str) {
+        self.text.extend(
+            text.chars()
+                .filter(|character| !character.is_control() && *character != '\u{7f}'),
+        );
+    }
+
+    pub fn add_backspace(&mut self) {
+        self.backspaces += 1;
+    }
+
+    pub fn add_tab(&mut self) {
+        self.tab_pressed = true;
+    }
+
+    pub fn add_enter(&mut self) {
+        self.enter_pressed = true;
+    }
+
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+
+    pub fn backspaces(&self) -> usize {
+        self.backspaces
+    }
+
+    pub fn tab_pressed(&self) -> bool {
+        self.tab_pressed
+    }
+
+    pub fn enter_pressed(&self) -> bool {
+        self.enter_pressed
+    }
+
+    pub fn clear_events(&mut self) {
+        self.text.clear();
+        self.backspaces = 0;
+        self.tab_pressed = false;
+        self.enter_pressed = false;
+    }
 }

@@ -42,6 +42,55 @@ pub fn button_system(state: &mut State) {
 }
 
 /// System for handling text inputs.
+pub fn text_input_system(state: &mut State) {
+    let (mouse_x, mouse_y, clicked) = {
+        let cursor = state.cursor();
+        let (mouse_x, mouse_y) = cursor.position();
+        (
+            mouse_x,
+            mouse_y,
+            cursor.was_button_pressed(MouseButton::Left),
+        )
+    };
+
+    let (typed_text, backspaces, tab_pressed, enter_pressed) = {
+        let keyboard = state.keyboard();
+        (
+            keyboard.text().to_string(),
+            keyboard.backspaces(),
+            keyboard.tab_pressed(),
+            keyboard.enter_pressed(),
+        )
+    };
+
+    if clicked {
+        let focused_index = state
+            .text_inputs
+            .iter()
+            .position(|input| input.contains(mouse_x, mouse_y));
+
+        for (index, input) in state.text_inputs.iter_mut().enumerate() {
+            input.focused = focused_index == Some(index);
+        }
+    }
+
+    if tab_pressed || enter_pressed {
+        focus_next_text_input(state);
+    }
+
+    let Some(focused_input) = state.text_inputs.iter_mut().find(|input| input.focused) else {
+        return;
+    };
+
+    if !typed_text.is_empty() {
+        focused_input.append_text(&typed_text);
+    }
+
+    for _ in 0..backspaces {
+        focused_input.backspace();
+    }
+}
+
 pub fn text_system(state: &mut State) {
     for index in 0..state.text_inputs.len() {
         let (font_descriptor, text, input_transform) = {
@@ -56,7 +105,7 @@ pub fn text_system(state: &mut State) {
 
             (
                 input.font_descriptor.clone(),
-                input.text.clone(),
+                input.display_text(),
                 Transform::from_xyz(input.transform.x, input.transform.y, input.transform.z),
             )
         };
@@ -77,4 +126,24 @@ pub fn text_system(state: &mut State) {
 
 fn create_text_layout(text: &str, input_transform: &Transform, font: &Font) -> TextLayout {
     TextLayout::new(text, input_transform, font)
+}
+
+pub fn clear_input_events_system(state: &mut State) {
+    state.cursor().clear_events();
+    state.keyboard().clear_events();
+}
+
+fn focus_next_text_input(state: &mut State) {
+    if state.text_inputs.is_empty() {
+        return;
+    }
+
+    let next_index = match state.text_inputs.iter().position(|input| input.focused) {
+        Some(index) => (index + 1) % state.text_inputs.len(),
+        None => 0,
+    };
+
+    for (index, input) in state.text_inputs.iter_mut().enumerate() {
+        input.focused = index == next_index;
+    }
 }

@@ -12,7 +12,7 @@ use crate::{
         ui::{Button, TextInput},
         Sprite,
     },
-    resource::{Cursor, WindowProxy},
+    resource::{Cursor, Keyboard, WindowProxy},
 };
 
 // TODO: maybe we can have a "UI" field that contains buttons, images, text fields, etc.
@@ -57,6 +57,11 @@ impl State {
     pub fn cursor(&self) -> RefMut<Cursor> {
         self.get_resource_mut::<Cursor>()
             .expect("Cursor should exist")
+    }
+
+    pub fn keyboard(&self) -> RefMut<Keyboard> {
+        self.get_resource_mut::<Keyboard>()
+            .expect("Keyboard should exist")
     }
 
     pub fn window(&self) -> RefMut<WindowProxy> {
