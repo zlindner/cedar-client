@@ -44,6 +44,7 @@ struct MapSpriteSpec {
     x: f32,
     y: f32,
     z: f32,
+    apply_view_offset: bool,
 }
 
 // TODO: we might eventually want sprites to be more complex (animations, hiding, etc.), so we may
@@ -175,9 +176,20 @@ fn init_test_map(state: &mut State) {
                 continue;
             };
 
+            let view_x = if spec.apply_view_offset {
+                TEST_MAP_VIEW_X
+            } else {
+                0.0
+            };
+            let view_y = if spec.apply_view_offset {
+                TEST_MAP_VIEW_Y
+            } else {
+                0.0
+            };
+
             sprites.push(Sprite::new(image).with_transform(Transform::from_xyz(
-                spec.x + TEST_MAP_VIEW_X,
-                spec.y + TEST_MAP_VIEW_Y,
+                spec.x + view_x,
+                spec.y + view_y,
                 spec.z,
             )));
         }
@@ -230,6 +242,7 @@ fn collect_background_specs(map: NxNode, specs: &mut Vec<MapSpriteSpec>) {
             x,
             y,
             z: if front { 19.0 } else { 0.0 },
+            apply_view_offset: false,
         });
     }
 }
@@ -275,6 +288,7 @@ fn collect_obj_specs(layer_node: NxNode, layer: i32, specs: &mut Vec<MapSpriteSp
             x: node_integer(obj, "x").unwrap_or_default() as f32,
             y: node_integer(obj, "y").unwrap_or_default() as f32,
             z: map_layer_z(layer, node_integer(obj, "z").unwrap_or_default()),
+            apply_view_offset: true,
         });
     }
 }
@@ -304,6 +318,7 @@ fn collect_tile_specs(layer_node: NxNode, layer: i32, specs: &mut Vec<MapSpriteS
             x: node_integer(tile, "x").unwrap_or_default() as f32,
             y: node_integer(tile, "y").unwrap_or_default() as f32,
             z: map_layer_z(layer, node_integer(tile, "zM").unwrap_or_default()),
+            apply_view_offset: true,
         });
     }
 }
