@@ -8,7 +8,7 @@ use std::{
 use component::Camera;
 use graphics::{RenderQueueBuilder, Renderer, RendererEvent};
 use resource::{input::CursorState, AssetManager, Cursor, Keyboard, WindowProxy};
-use scene::{LoginScene, Scene};
+use scene::{GameScene, LoginScene, Scene};
 use state::State;
 use winit::{
     application::ApplicationHandler,
@@ -28,6 +28,7 @@ mod system;
 
 const VIRTUAL_WIDTH: f32 = 800.0;
 const VIRTUAL_HEIGHT: f32 = 600.0;
+const START_IN_GAME_SCENE: bool = true;
 
 enum WindowState {
     Uninitialized(EventLoopProxy<RendererEvent>),
@@ -269,7 +270,7 @@ impl ApplicationHandler<RendererEvent> for WindowState {
                         asset_manager: Some(asset_manager),
                         state: State::new(),
                         systems: Vec::new(),
-                        scene: Box::new(LoginScene::default()),
+                        scene: initial_scene(),
                         renderer_tx,
                         window_rx,
                         custom_cursors,
@@ -412,6 +413,14 @@ impl ApplicationHandler<RendererEvent> for WindowState {
         };
 
         manager.renderer.handle_event(event);
+    }
+}
+
+fn initial_scene() -> Box<dyn Scene> {
+    if START_IN_GAME_SCENE {
+        Box::new(GameScene)
+    } else {
+        Box::new(LoginScene)
     }
 }
 

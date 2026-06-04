@@ -48,18 +48,30 @@ impl Button {
         self
     }
 
-    pub fn transform(&self) -> &Transform {
-        &self.transform
+    pub fn contains_point(&self, x: f64, y: f64) -> bool {
+        let image = self.image_for_state(ButtonState::Default).image();
+
+        let (origin_x, origin_y) = image.origin.unwrap_or_default();
+        let left = f64::from(self.transform.x - origin_x as f32);
+        let top = f64::from(self.transform.y - origin_y as f32);
+        let right = left + f64::from(self.width);
+        let bottom = top + f64::from(self.height);
+
+        x >= left && x <= right && y >= top && y <= bottom
+    }
+
+    fn image_for_state(&self, state: ButtonState) -> &ImageHandle {
+        self.images[state as usize].as_ref().unwrap_or(
+            self.images[ButtonState::Default as usize]
+                .as_ref()
+                .expect("button should have a default image"),
+        )
     }
 }
 
 impl RenderCommandSource for Button {
     fn append_render_commands(&self, commands: &mut Vec<RenderCommand>) {
-        let image = self.images[self.state as usize].as_ref().unwrap_or(
-            self.images[ButtonState::Default as usize]
-                .as_ref()
-                .expect("button should have a default image"),
-        );
+        let image = self.image_for_state(self.state);
 
         commands.push(RenderCommand {
             id: self.id,

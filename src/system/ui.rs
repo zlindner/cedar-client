@@ -11,25 +11,19 @@ use crate::{
 pub fn button_system(state: &mut State) {
     let (mouse_x, mouse_y) = state.cursor().position();
     let is_clicking = state.cursor().is_button_pressed(MouseButton::Left);
+    let was_clicked = state.cursor().was_button_pressed(MouseButton::Left);
 
     for button in state.buttons.iter_mut() {
         if button.state == ButtonState::Disabled {
             continue;
         }
 
-        let transform = button.transform();
-
         // The mouse is currently hovering over the button.
-        if mouse_x >= transform.x.into()
-            && mouse_x <= (transform.x + button.width as f32).into()
-            && mouse_y >= transform.y.into()
-            && mouse_y <= (transform.y + button.height as f32).into()
-        {
+        if button.contains_point(mouse_x, mouse_y) {
             if is_clicking {
                 button.state = ButtonState::Pressed;
 
-                // FIXME: this clicks multiple times.
-                if button.on_click.is_some() {
+                if was_clicked && button.on_click.is_some() {
                     (button.on_click.unwrap())();
                 }
             } else {

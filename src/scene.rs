@@ -1,7 +1,7 @@
 use crate::{
     component::{Colour, Transform},
     graphics::{
-        ui::{load_button_images, Button, TextInput},
+        ui::{load_button_images, Button, ButtonState, TextInput},
         Sprite,
     },
     resource::{AssetManager, FontDescriptor},
@@ -20,6 +20,15 @@ impl Scene for LoginScene {
         init_sprites(state);
         init_buttons(state);
         init_text_inputs(state);
+    }
+}
+
+#[derive(Default)]
+pub struct GameScene;
+
+impl Scene for GameScene {
+    fn init(&mut self, state: &mut State) {
+        init_game_status_bar(state);
     }
 }
 
@@ -135,4 +144,193 @@ fn init_text_inputs(state: &mut State) {
 
     state.text_inputs.push(username_input);
     state.text_inputs.push(password_input);
+}
+
+fn init_game_status_bar(state: &mut State) {
+    let (sprites, buttons) = {
+        let mut assets = state
+            .get_resource_mut::<AssetManager>()
+            .expect("AssetManager should exist");
+
+        let mut sprites = Vec::new();
+        push_sprite(
+            &mut sprites,
+            &mut assets,
+            "UI.nx/StatusBar3.img/mainBar/EXPBar/backgrnd",
+            0.0,
+            87.0,
+            20.0,
+        );
+        push_sprite(
+            &mut sprites,
+            &mut assets,
+            "UI.nx/StatusBar3.img/mainBar/EXPBar/800/layer:back",
+            0.0,
+            87.0,
+            21.0,
+        );
+        push_sprite(
+            &mut sprites,
+            &mut assets,
+            "UI.nx/StatusBar3.img/mainBar/EXPBar/800/layer:gauge",
+            0.0,
+            87.0,
+            22.0,
+        );
+        push_sprite(
+            &mut sprites,
+            &mut assets,
+            "UI.nx/StatusBar3.img/mainBar/EXPBar/800/layer:cover",
+            0.0,
+            87.0,
+            23.0,
+        );
+
+        let hpmp_x = 412.0;
+        let hpmp_y = 40.0;
+        push_sprite(
+            &mut sprites,
+            &mut assets,
+            "UI.nx/StatusBar3.img/mainBar/status800/backgrnd",
+            hpmp_x - 1.0,
+            hpmp_y,
+            24.0,
+        );
+        push_sprite(
+            &mut sprites,
+            &mut assets,
+            "UI.nx/StatusBar3.img/mainBar/status800/gauge/hp/layer:0",
+            hpmp_x,
+            hpmp_y,
+            25.0,
+        );
+        push_sprite(
+            &mut sprites,
+            &mut assets,
+            "UI.nx/StatusBar3.img/mainBar/status800/gauge/mp/layer:0",
+            hpmp_x,
+            hpmp_y,
+            26.0,
+        );
+        push_sprite(
+            &mut sprites,
+            &mut assets,
+            "UI.nx/StatusBar3.img/mainBar/status800/layer:cover",
+            hpmp_x - 1.0,
+            hpmp_y,
+            27.0,
+        );
+        push_sprite(
+            &mut sprites,
+            &mut assets,
+            "UI.nx/StatusBar3.img/mainBar/status800/layer:Lv",
+            hpmp_x,
+            hpmp_y,
+            28.0,
+        );
+
+        push_sprite(
+            &mut sprites,
+            &mut assets,
+            "UI.nx/StatusBar3.img/mainBar/quickSlot/backgrnd",
+            579.0,
+            0.0,
+            24.0,
+        );
+        push_sprite(
+            &mut sprites,
+            &mut assets,
+            "UI.nx/StatusBar3.img/mainBar/quickSlot/layer:cover",
+            579.0,
+            0.0,
+            25.0,
+        );
+
+        let button_pos = Transform::from_xyz(591.0, 73.0, 30.0);
+        let mut buttons = Vec::new();
+        push_button(
+            &mut buttons,
+            &mut assets,
+            "UI.nx/StatusBar3.img/mainBar/menu/button:CashShop",
+            button_pos,
+            || log::info!("cash shop"),
+        );
+        push_button(
+            &mut buttons,
+            &mut assets,
+            "UI.nx/StatusBar3.img/mainBar/menu/button:Menu",
+            button_pos,
+            || log::info!("menu"),
+        );
+        push_button(
+            &mut buttons,
+            &mut assets,
+            "UI.nx/StatusBar3.img/mainBar/menu/button:Setting",
+            button_pos,
+            || log::info!("settings"),
+        );
+        push_button(
+            &mut buttons,
+            &mut assets,
+            "UI.nx/StatusBar3.img/mainBar/menu/button:Character",
+            button_pos,
+            || log::info!("character"),
+        );
+        push_button(
+            &mut buttons,
+            &mut assets,
+            "UI.nx/StatusBar3.img/mainBar/menu/button:Community",
+            button_pos,
+            || log::info!("community"),
+        );
+        push_button(
+            &mut buttons,
+            &mut assets,
+            "UI.nx/StatusBar3.img/mainBar/menu/button:Event",
+            button_pos,
+            || log::info!("event"),
+        );
+
+        (sprites, buttons)
+    };
+
+    state.sprites.extend(sprites);
+    state.buttons.extend(buttons);
+}
+
+fn push_sprite(
+    sprites: &mut Vec<Sprite>,
+    assets: &mut AssetManager,
+    path: &str,
+    x: f32,
+    y: f32,
+    z: f32,
+) {
+    let Some(image) = assets.load_image(path) else {
+        log::warn!("Skipping missing game scene sprite {}", path);
+        return;
+    };
+
+    sprites.push(Sprite::new(image).with_transform(Transform::from_xyz(x, y, z)));
+}
+
+fn push_button(
+    buttons: &mut Vec<Button>,
+    assets: &mut AssetManager,
+    path: &str,
+    transform: Transform,
+    on_click: fn(),
+) {
+    let images = load_button_images(assets, path);
+
+    if images[ButtonState::Default as usize].is_none() {
+        log::warn!("Skipping missing game scene button {}", path);
+        return;
+    }
+
+    buttons.push(
+        Button::new(images)
+            .with_transform(transform)
+            .with_on_click(on_click),
+    );
 }
