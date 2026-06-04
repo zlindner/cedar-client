@@ -53,11 +53,26 @@ pub fn text_input_system(state: &mut State) {
         )
     };
 
-    let (typed_text, backspaces, tab_pressed, enter_pressed) = {
+    let (
+        typed_text,
+        backspaces,
+        deletes,
+        left_pressed,
+        right_pressed,
+        home_pressed,
+        end_pressed,
+        tab_pressed,
+        enter_pressed,
+    ) = {
         let keyboard = state.keyboard();
         (
             keyboard.text().to_string(),
             keyboard.backspaces(),
+            keyboard.deletes(),
+            keyboard.left_pressed(),
+            keyboard.right_pressed(),
+            keyboard.home_pressed(),
+            keyboard.end_pressed(),
             keyboard.tab_pressed(),
             keyboard.enter_pressed(),
         )
@@ -70,7 +85,7 @@ pub fn text_input_system(state: &mut State) {
             .position(|input| input.contains(mouse_x, mouse_y));
 
         for (index, input) in state.text_inputs.iter_mut().enumerate() {
-            input.focused = focused_index == Some(index);
+            input.set_focused(focused_index == Some(index));
         }
     }
 
@@ -82,6 +97,22 @@ pub fn text_input_system(state: &mut State) {
         return;
     };
 
+    if home_pressed {
+        focused_input.move_caret_to_start();
+    }
+
+    if end_pressed {
+        focused_input.move_caret_to_end();
+    }
+
+    if left_pressed {
+        focused_input.move_caret_left();
+    }
+
+    if right_pressed {
+        focused_input.move_caret_right();
+    }
+
     if !typed_text.is_empty() {
         focused_input.append_text(&typed_text);
     }
@@ -89,11 +120,15 @@ pub fn text_input_system(state: &mut State) {
     for _ in 0..backspaces {
         focused_input.backspace();
     }
+
+    for _ in 0..deletes {
+        focused_input.delete();
+    }
 }
 
 pub fn text_system(state: &mut State) {
     for index in 0..state.text_inputs.len() {
-        let (font_descriptor, text, input_transform) = {
+        let (font_descriptor, text, input_transform, focused, caret_index) = {
             let input = &mut state.text_inputs[index];
 
             // The input hasn't changed, ex. nothing was typed while focused.
@@ -107,20 +142,36 @@ pub fn text_system(state: &mut State) {
                 input.font_descriptor.clone(),
                 input.display_text(),
                 Transform::from_xyz(input.transform.x, input.transform.y, input.transform.z),
+                input.focused,
+                input.caret_index(),
             )
         };
 
-        let layout = {
+        let (layout, caret_layout) = {
             let mut assets = state
                 .get_resource_mut::<AssetManager>()
                 .expect("AssetManager should exist");
             // TODO: this should be the font/font size/colour of the input
             let font = assets.get_font(&font_descriptor).unwrap();
 
-            create_text_layout(&text, &input_transform, font)
+            let layout = create_text_layout(&text, &input_transform, font);
+            let caret_layout = if focused {
+                let caret_offset = layout.advance(caret_index);
+                let caret_transform = Transform::from_xyz(
+                    input_transform.x + caret_offset,
+                    input_transform.y - 1.0,
+                    input_transform.z,
+                );
+
+                create_text_layout("|", &caret_transform, font)
+            } else {
+                TextLayout::empty()
+            };
+
+            (layout, caret_layout)
         };
 
-        state.text_inputs[index].set_layout(layout);
+        state.text_inputs[index].set_layout(layout, caret_layout);
     }
 }
 
@@ -144,6 +195,6 @@ fn focus_next_text_input(state: &mut State) {
     };
 
     for (index, input) in state.text_inputs.iter_mut().enumerate() {
-        input.focused = index == next_index;
+        input.set_focused(index == next_index);
     }
 }

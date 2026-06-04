@@ -124,12 +124,14 @@ fn init_text_inputs(state: &mut State) {
     let username_input = TextInput::new(150, 24)
         .with_font(FontDescriptor::new("Arial", 13, Colour::white()))
         .with_transform(Transform::from_xyz(296.0, 279.0, 11.0))
-        .with_focused(true);
+        .with_focused(true)
+        .with_max_length(12);
 
     let password_input = TextInput::new(150, 24)
         .with_font(FontDescriptor::new("Arial", 13, Colour::white()))
         .with_transform(Transform::from_xyz(296.0, 305.0, 11.0))
-        .with_masked(true);
+        .with_masked(true)
+        .with_max_length(12);
 
     state.text_inputs.push(username_input);
     state.text_inputs.push(password_input);

@@ -55,6 +55,11 @@ enum GameWindowEvent {
         text: String,
     },
     Backspace,
+    Delete,
+    Left,
+    Right,
+    Home,
+    End,
     Tab,
     Enter,
     Resized {
@@ -158,6 +163,21 @@ impl Cedar {
                 }
                 GameWindowEvent::Backspace => {
                     self.state.keyboard().add_backspace();
+                }
+                GameWindowEvent::Delete => {
+                    self.state.keyboard().add_delete();
+                }
+                GameWindowEvent::Left => {
+                    self.state.keyboard().add_left();
+                }
+                GameWindowEvent::Right => {
+                    self.state.keyboard().add_right();
+                }
+                GameWindowEvent::Home => {
+                    self.state.keyboard().add_home();
+                }
+                GameWindowEvent::End => {
+                    self.state.keyboard().add_end();
                 }
                 GameWindowEvent::Tab => {
                     self.state.keyboard().add_tab();
@@ -317,6 +337,31 @@ impl ApplicationHandler<RendererEvent> for WindowState {
                 match event.logical_key {
                     Key::Named(NamedKey::Backspace) => {
                         if let Err(e) = manager.sender.send(GameWindowEvent::Backspace) {
+                            log::error!("Error sending window event: {}", e);
+                        }
+                    }
+                    Key::Named(NamedKey::Delete) => {
+                        if let Err(e) = manager.sender.send(GameWindowEvent::Delete) {
+                            log::error!("Error sending window event: {}", e);
+                        }
+                    }
+                    Key::Named(NamedKey::ArrowLeft) => {
+                        if let Err(e) = manager.sender.send(GameWindowEvent::Left) {
+                            log::error!("Error sending window event: {}", e);
+                        }
+                    }
+                    Key::Named(NamedKey::ArrowRight) => {
+                        if let Err(e) = manager.sender.send(GameWindowEvent::Right) {
+                            log::error!("Error sending window event: {}", e);
+                        }
+                    }
+                    Key::Named(NamedKey::Home) => {
+                        if let Err(e) = manager.sender.send(GameWindowEvent::Home) {
+                            log::error!("Error sending window event: {}", e);
+                        }
+                    }
+                    Key::Named(NamedKey::End) => {
+                        if let Err(e) = manager.sender.send(GameWindowEvent::End) {
                             log::error!("Error sending window event: {}", e);
                         }
                     }

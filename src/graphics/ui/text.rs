@@ -43,6 +43,7 @@ impl RenderCommandSource for TextGlyph {
 
 pub struct TextLayout {
     glyphs: Vec<TextGlyph>,
+    advances: Vec<f32>,
     pub width: f32,
     pub height: f32,
 }
@@ -51,6 +52,7 @@ impl TextLayout {
     pub fn empty() -> Self {
         Self {
             glyphs: Vec::new(),
+            advances: vec![0.0],
             width: 0.0,
             height: 0.0,
         }
@@ -62,8 +64,11 @@ impl TextLayout {
         let mut current_pos = 0.0;
 
         layout.height = font.line_height;
+        layout.advances.clear();
 
         for input_character in text.chars() {
+            layout.advances.push(current_pos);
+
             let Some(character) = font.characters.get(&input_character) else {
                 current_pos += font.advance(input_character);
                 layout.width = layout.width.max(current_pos);
@@ -84,7 +89,13 @@ impl TextLayout {
             layout.width = layout.width.max(current_pos);
         }
 
+        layout.advances.push(current_pos);
+
         layout
+    }
+
+    pub fn advance(&self, index: usize) -> f32 {
+        self.advances.get(index).copied().unwrap_or(self.width)
     }
 }
 

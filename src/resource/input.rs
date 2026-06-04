@@ -103,6 +103,11 @@ pub enum CursorState {
 pub struct Keyboard {
     text: String,
     backspaces: usize,
+    deletes: usize,
+    left_pressed: bool,
+    right_pressed: bool,
+    home_pressed: bool,
+    end_pressed: bool,
     tab_pressed: bool,
     enter_pressed: bool,
 }
@@ -112,6 +117,11 @@ impl Keyboard {
         Self {
             text: String::new(),
             backspaces: 0,
+            deletes: 0,
+            left_pressed: false,
+            right_pressed: false,
+            home_pressed: false,
+            end_pressed: false,
             tab_pressed: false,
             enter_pressed: false,
         }
@@ -126,6 +136,26 @@ impl Keyboard {
 
     pub fn add_backspace(&mut self) {
         self.backspaces += 1;
+    }
+
+    pub fn add_delete(&mut self) {
+        self.deletes += 1;
+    }
+
+    pub fn add_left(&mut self) {
+        self.left_pressed = true;
+    }
+
+    pub fn add_right(&mut self) {
+        self.right_pressed = true;
+    }
+
+    pub fn add_home(&mut self) {
+        self.home_pressed = true;
+    }
+
+    pub fn add_end(&mut self) {
+        self.end_pressed = true;
     }
 
     pub fn add_tab(&mut self) {
@@ -144,6 +174,26 @@ impl Keyboard {
         self.backspaces
     }
 
+    pub fn deletes(&self) -> usize {
+        self.deletes
+    }
+
+    pub fn left_pressed(&self) -> bool {
+        self.left_pressed
+    }
+
+    pub fn right_pressed(&self) -> bool {
+        self.right_pressed
+    }
+
+    pub fn home_pressed(&self) -> bool {
+        self.home_pressed
+    }
+
+    pub fn end_pressed(&self) -> bool {
+        self.end_pressed
+    }
+
     pub fn tab_pressed(&self) -> bool {
         self.tab_pressed
     }
@@ -155,6 +205,11 @@ impl Keyboard {
     pub fn clear_events(&mut self) {
         self.text.clear();
         self.backspaces = 0;
+        self.deletes = 0;
+        self.left_pressed = false;
+        self.right_pressed = false;
+        self.home_pressed = false;
+        self.end_pressed = false;
         self.tab_pressed = false;
         self.enter_pressed = false;
     }
