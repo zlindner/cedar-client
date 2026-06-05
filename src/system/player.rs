@@ -1,4 +1,5 @@
 use crate::{
+    component::Camera,
     resource::{GameKey, Player},
     state::State,
 };
@@ -18,11 +19,11 @@ const AIR_TURN_BRAKE: f32 = 0.025;
 
 pub fn player_movement_system(state: &mut State) {
     let (left, right, jump) = {
-        let keyboard = state.keyboard();
+        let mut keyboard = state.keyboard();
         (
             keyboard.key_down(GameKey::Left),
             keyboard.key_down(GameKey::Right),
-            keyboard.key_pressed(GameKey::Jump),
+            keyboard.consume_key_pressed(GameKey::Jump),
         )
     };
 
@@ -66,6 +67,22 @@ pub fn player_movement_system(state: &mut State) {
     for (sprite_index, transform) in sprite_updates {
         state.sprites[sprite_index].set_transform(transform);
     }
+}
+
+pub fn camera_follow_system(state: &mut State) {
+    let Some(player) = state.get_resource::<Player>() else {
+        return;
+    };
+    let player_x = player.x;
+    drop(player);
+
+    let Some(mut camera) = state.get_resource_mut::<Camera>() else {
+        return;
+    };
+
+    // Keep the camera vertically stable for now. Maple-style camera follow should
+    // eventually use map bounds/dead zones rather than tracking jump height.
+    camera.center_on(player_x, FLOOR_Y);
 }
 
 fn move_normal(player: &mut Player, hforce: f32, vforce: f32) {

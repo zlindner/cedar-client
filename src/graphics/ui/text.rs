@@ -37,6 +37,7 @@ impl RenderCommandSource for TextGlyph {
             texture: self.texture.clone(),
             transform: self.transform,
             layer: self.transform.z as usize,
+            camera_affected: false,
         });
     }
 }

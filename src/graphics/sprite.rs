@@ -9,6 +9,7 @@ pub struct Sprite {
     id: Uuid,
     image: ImageHandle,
     transform: Transform,
+    camera_affected: bool,
 }
 
 impl Sprite {
@@ -17,6 +18,7 @@ impl Sprite {
             id: Uuid::new_v4(),
             image,
             transform: Transform::default(),
+            camera_affected: true,
         }
     }
 
@@ -32,6 +34,11 @@ impl Sprite {
     pub fn set_transform(&mut self, transform: Transform) {
         self.transform = transform;
     }
+
+    pub fn with_screen_space(mut self) -> Self {
+        self.camera_affected = false;
+        self
+    }
 }
 
 impl RenderCommandSource for Sprite {
@@ -41,6 +48,7 @@ impl RenderCommandSource for Sprite {
             texture: Texture::from_image(self.image.image()),
             transform: self.transform,
             layer: self.transform.z as usize,
+            camera_affected: self.camera_affected,
         });
     }
 }

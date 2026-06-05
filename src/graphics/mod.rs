@@ -40,6 +40,7 @@ pub struct RenderCommand {
     pub texture: Texture,
     pub transform: Transform,
     pub layer: usize,
+    pub camera_affected: bool,
 }
 
 pub trait RenderCommandSource {

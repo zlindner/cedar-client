@@ -197,11 +197,17 @@ fn init_test_map(state: &mut State) {
                 0.0
             };
 
-            sprites.push(Sprite::new(image).with_transform(Transform::from_xyz(
+            let sprite = Sprite::new(image).with_transform(Transform::from_xyz(
                 spec.x + view_x,
                 spec.y + view_y,
                 spec.z,
-            )));
+            ));
+
+            sprites.push(if spec.apply_view_offset {
+                sprite
+            } else {
+                sprite.with_screen_space()
+            });
         }
 
         sprites
@@ -614,7 +620,11 @@ fn push_sprite(
         return;
     };
 
-    sprites.push(Sprite::new(image).with_transform(status_bar_transform(x, y, z)));
+    sprites.push(
+        Sprite::new(image)
+            .with_transform(status_bar_transform(x, y, z))
+            .with_screen_space(),
+    );
 }
 
 fn status_bar_transform(x: f32, y: f32, z: f32) -> Transform {

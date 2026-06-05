@@ -141,8 +141,9 @@ impl Keyboard {
     pub fn set_key_state(&mut self, key: GameKey, state: ElementState) {
         match state {
             ElementState::Pressed => {
-                self.held_keys.insert(key);
-                self.pressed_keys.insert(key);
+                if self.held_keys.insert(key) {
+                    self.pressed_keys.insert(key);
+                }
             }
             ElementState::Released => {
                 self.held_keys.remove(&key);
@@ -222,12 +223,11 @@ impl Keyboard {
         self.held_keys.contains(&key)
     }
 
-    pub fn key_pressed(&self, key: GameKey) -> bool {
-        self.pressed_keys.contains(&key)
+    pub fn consume_key_pressed(&mut self, key: GameKey) -> bool {
+        self.pressed_keys.remove(&key)
     }
 
     pub fn clear_events(&mut self) {
-        self.pressed_keys.clear();
         self.text.clear();
         self.backspaces = 0;
         self.deletes = 0;

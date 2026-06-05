@@ -159,6 +159,8 @@ impl Cedar {
 
         self.fixed_update_systems
             .push(system::player::player_movement_system);
+        self.fixed_update_systems
+            .push(system::player::camera_follow_system);
         self.input_systems.push(system::ui::button_system);
         self.input_systems.push(system::ui::text_input_system);
         self.input_systems.push(system::ui::text_system);

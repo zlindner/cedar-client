@@ -78,6 +78,7 @@ impl RenderCommandSource for Button {
             texture: Texture::from_image(image.image()),
             transform: self.transform,
             layer: self.transform.z as usize,
+            camera_affected: false,
         });
     }
 }

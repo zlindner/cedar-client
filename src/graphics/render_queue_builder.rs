@@ -30,11 +30,15 @@ impl RenderQueueBuilder {
     pub fn generate_and_send_events(&mut self, state: &mut State) {
         let commands = self.get_render_commands(state);
         let camera = state.get_resource::<Camera>().unwrap();
+        let screen_camera = camera.screen_space();
         let visible_commands = commands
             .iter()
-            .filter(|command| command_intersects_camera(command, &camera))
+            .filter(|command| {
+                let command_camera = command_camera(command, &camera, &screen_camera);
+                command_intersects_camera(command, command_camera)
+            })
             .collect::<Vec<_>>();
-        let updates = self.get_render_updates(&visible_commands, &camera);
+        let updates = self.get_render_updates(&visible_commands, &camera, &screen_camera);
         let items = self.get_render_items(&visible_commands);
 
         // TODO we can probably just send a single vec, push updates first, then items.
@@ -68,11 +72,13 @@ impl RenderQueueBuilder {
         &mut self,
         commands: &[&RenderCommand],
         camera: &Camera,
+        screen_camera: &Camera,
     ) -> Vec<RenderUpdate> {
         let mut updates = Vec::new();
 
         for command in commands {
-            updates.append(&mut self.get_updates_for_command(command, camera));
+            let command_camera = command_camera(command, camera, screen_camera);
+            updates.append(&mut self.get_updates_for_command(command, command_camera));
         }
 
         updates
@@ -157,4 +163,16 @@ fn command_intersects_camera(command: &RenderCommand, camera: &Camera) -> bool {
     let camera_bottom = -camera.bottom;
 
     right >= camera_left && left <= camera_right && bottom >= camera_top && top <= camera_bottom
+}
+
+fn command_camera<'a>(
+    command: &RenderCommand,
+    world_camera: &'a Camera,
+    screen_camera: &'a Camera,
+) -> &'a Camera {
+    if command.camera_affected {
+        world_camera
+    } else {
+        screen_camera
+    }
 }
