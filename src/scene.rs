@@ -30,6 +30,7 @@ pub struct GameScene;
 impl Scene for GameScene {
     fn init(&mut self, state: &mut State) {
         init_test_map(state);
+        init_test_character(state);
         init_game_status_bar(state);
     }
 }
@@ -37,14 +38,23 @@ impl Scene for GameScene {
 const TEST_MAP_ID: i32 = 100000000;
 const TEST_MAP_VIEW_X: f32 = -3600.0;
 const TEST_MAP_VIEW_Y: f32 = 0.0;
+const TEST_CHARACTER_NECK_X: f32 = 400.0;
+const TEST_CHARACTER_NECK_Y: f32 = 350.0;
 const GAME_STATUS_BAR_Y: f32 = 480.0;
 
-struct MapSpriteSpec {
+struct MapSpritePlacement {
     path: String,
     x: f32,
     y: f32,
     z: f32,
     apply_view_offset: bool,
+}
+
+struct CharacterPartPlacement {
+    path: &'static str,
+    x: f32,
+    y: f32,
+    z: f32,
 }
 
 // TODO: we might eventually want sprites to be more complex (animations, hiding, etc.), so we may
@@ -200,7 +210,87 @@ fn init_test_map(state: &mut State) {
     state.sprites.extend(sprites);
 }
 
-fn collect_test_map_sprite_specs(assets: &AssetManager) -> Vec<MapSpriteSpec> {
+fn init_test_character(state: &mut State) {
+    let sprites = {
+        let mut assets = state
+            .get_resource_mut::<AssetManager>()
+            .expect("AssetManager should exist");
+
+        let specs = test_character_part_placements();
+        let mut sprites = Vec::new();
+
+        for spec in specs {
+            let Some(image) = assets.load_image(spec.path) else {
+                log::warn!("Skipping missing character sprite {}", spec.path);
+                continue;
+            };
+
+            sprites.push(
+                Sprite::new(image).with_transform(Transform::from_xyz(spec.x, spec.y, spec.z)),
+            );
+        }
+
+        sprites
+    };
+
+    state.sprites.extend(sprites);
+}
+
+fn test_character_part_placements() -> Vec<CharacterPartPlacement> {
+    let neck = (TEST_CHARACTER_NECK_X, TEST_CHARACTER_NECK_Y);
+
+    let body = align_part_to_anchor(neck, (-4.0, -32.0));
+    let body_navel = add_points(body, (-8.0, -21.0));
+    let arm = align_part_to_anchor(body_navel, (-13.0, -1.0));
+
+    let head = align_part_to_anchor(neck, (0.0, 15.0));
+    let brow = add_points(head, (-4.0, -5.0));
+    let face = align_part_to_anchor(brow, (-1.0, -12.0));
+    let hair = align_part_to_anchor(brow, (0.0, 0.0));
+
+    vec![
+        CharacterPartPlacement {
+            path: "Character.nx/00002000.img/stand1/0/body",
+            x: body.0,
+            y: body.1,
+            z: 17.0,
+        },
+        CharacterPartPlacement {
+            path: "Character.nx/00002000.img/stand1/0/arm",
+            x: arm.0,
+            y: arm.1,
+            z: 18.0,
+        },
+        CharacterPartPlacement {
+            path: "Character.nx/00012000.img/front/head",
+            x: head.0,
+            y: head.1,
+            z: 19.0,
+        },
+        CharacterPartPlacement {
+            path: "Character.nx/Face/00020000.img/default/face",
+            x: face.0,
+            y: face.1,
+            z: 20.0,
+        },
+        CharacterPartPlacement {
+            path: "Character.nx/Hair/00030000.img/default/hair",
+            x: hair.0,
+            y: hair.1,
+            z: 21.0,
+        },
+    ]
+}
+
+fn align_part_to_anchor(anchor: (f32, f32), part_anchor: (f32, f32)) -> (f32, f32) {
+    (anchor.0 - part_anchor.0, anchor.1 - part_anchor.1)
+}
+
+fn add_points(a: (f32, f32), b: (f32, f32)) -> (f32, f32) {
+    (a.0 + b.0, a.1 + b.1)
+}
+
+fn collect_test_map_sprite_specs(assets: &AssetManager) -> Vec<MapSpritePlacement> {
     let map_path = map_node_path(TEST_MAP_ID);
     let Some(specs) = assets.with_node(&map_path, |map| {
         let mut specs = Vec::new();
@@ -215,7 +305,7 @@ fn collect_test_map_sprite_specs(assets: &AssetManager) -> Vec<MapSpriteSpec> {
     specs
 }
 
-fn collect_background_specs(map: NxNode, specs: &mut Vec<MapSpriteSpec>) {
+fn collect_background_specs(map: NxNode, specs: &mut Vec<MapSpritePlacement>) {
     let Some(back) = map.get("back") else {
         return;
     };
@@ -237,7 +327,7 @@ fn collect_background_specs(map: NxNode, specs: &mut Vec<MapSpriteSpec>) {
             "ani"
         };
 
-        specs.push(MapSpriteSpec {
+        specs.push(MapSpritePlacement {
             path: format!("Map.nx/Back/{}.img/{}/{}", background_set, frame_group, no),
             x,
             y,
@@ -247,7 +337,7 @@ fn collect_background_specs(map: NxNode, specs: &mut Vec<MapSpriteSpec>) {
     }
 }
 
-fn collect_layer_specs(map: NxNode, specs: &mut Vec<MapSpriteSpec>) {
+fn collect_layer_specs(map: NxNode, specs: &mut Vec<MapSpritePlacement>) {
     for layer in 0..8 {
         let Some(layer_node) = map.get(&layer.to_string()) else {
             continue;
@@ -258,7 +348,7 @@ fn collect_layer_specs(map: NxNode, specs: &mut Vec<MapSpriteSpec>) {
     }
 }
 
-fn collect_obj_specs(layer_node: NxNode, layer: i32, specs: &mut Vec<MapSpriteSpec>) {
+fn collect_obj_specs(layer_node: NxNode, layer: i32, specs: &mut Vec<MapSpritePlacement>) {
     let Some(objs) = layer_node.get("obj") else {
         return;
     };
@@ -280,7 +370,7 @@ fn collect_obj_specs(layer_node: NxNode, layer: i32, specs: &mut Vec<MapSpriteSp
             continue;
         };
 
-        specs.push(MapSpriteSpec {
+        specs.push(MapSpritePlacement {
             path: format!(
                 "Map.nx/Obj/{}.img/{}/{}/{}/0",
                 object_set, layer_0, layer_1, layer_2
@@ -293,7 +383,7 @@ fn collect_obj_specs(layer_node: NxNode, layer: i32, specs: &mut Vec<MapSpriteSp
     }
 }
 
-fn collect_tile_specs(layer_node: NxNode, layer: i32, specs: &mut Vec<MapSpriteSpec>) {
+fn collect_tile_specs(layer_node: NxNode, layer: i32, specs: &mut Vec<MapSpritePlacement>) {
     let Some(tile_set) = layer_node
         .get("info")
         .and_then(|info| node_string(info, "tS"))
@@ -313,7 +403,7 @@ fn collect_tile_specs(layer_node: NxNode, layer: i32, specs: &mut Vec<MapSpriteS
         };
         let no = node_integer(tile, "no").unwrap_or_default();
 
-        specs.push(MapSpriteSpec {
+        specs.push(MapSpritePlacement {
             path: format!("Map.nx/Tile/{}.img/{}/{}", tile_set, tile_group, no),
             x: node_integer(tile, "x").unwrap_or_default() as f32,
             y: node_integer(tile, "y").unwrap_or_default() as f32,
