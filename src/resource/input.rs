@@ -101,6 +101,8 @@ pub enum CursorState {
 }
 
 pub struct Keyboard {
+    held_keys: HashSet<GameKey>,
+    pressed_keys: HashSet<GameKey>,
     text: String,
     backspaces: usize,
     deletes: usize,
@@ -115,6 +117,8 @@ pub struct Keyboard {
 impl Keyboard {
     pub fn new() -> Self {
         Self {
+            held_keys: HashSet::new(),
+            pressed_keys: HashSet::new(),
             text: String::new(),
             backspaces: 0,
             deletes: 0,
@@ -132,6 +136,18 @@ impl Keyboard {
             text.chars()
                 .filter(|character| !character.is_control() && *character != '\u{7f}'),
         );
+    }
+
+    pub fn set_key_state(&mut self, key: GameKey, state: ElementState) {
+        match state {
+            ElementState::Pressed => {
+                self.held_keys.insert(key);
+                self.pressed_keys.insert(key);
+            }
+            ElementState::Released => {
+                self.held_keys.remove(&key);
+            }
+        };
     }
 
     pub fn add_backspace(&mut self) {
@@ -202,7 +218,16 @@ impl Keyboard {
         self.enter_pressed
     }
 
+    pub fn key_down(&self, key: GameKey) -> bool {
+        self.held_keys.contains(&key)
+    }
+
+    pub fn key_pressed(&self, key: GameKey) -> bool {
+        self.pressed_keys.contains(&key)
+    }
+
     pub fn clear_events(&mut self) {
+        self.pressed_keys.clear();
         self.text.clear();
         self.backspaces = 0;
         self.deletes = 0;
@@ -213,4 +238,13 @@ impl Keyboard {
         self.tab_pressed = false;
         self.enter_pressed = false;
     }
+}
+
+#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
+pub enum GameKey {
+    Left,
+    Right,
+    Up,
+    Down,
+    Jump,
 }

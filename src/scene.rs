@@ -4,7 +4,7 @@ use crate::{
         ui::{load_button_images, Button, ButtonState, TextInput},
         Sprite,
     },
-    resource::{AssetManager, FontDescriptor},
+    resource::{AssetManager, FontDescriptor, Player, PlayerPart},
     state::State,
 };
 use nx_pkg4::{Node, NxNode};
@@ -211,29 +211,45 @@ fn init_test_map(state: &mut State) {
 }
 
 fn init_test_character(state: &mut State) {
+    let start_index = state.sprites.len();
+    let mut parts = Vec::new();
+
     let sprites = {
         let mut assets = state
             .get_resource_mut::<AssetManager>()
             .expect("AssetManager should exist");
 
-        let specs = test_character_part_placements();
+        let placements = test_character_part_placements();
         let mut sprites = Vec::new();
 
-        for spec in specs {
-            let Some(image) = assets.load_image(spec.path) else {
-                log::warn!("Skipping missing character sprite {}", spec.path);
+        for placement in placements {
+            let Some(image) = assets.load_image(placement.path) else {
+                log::warn!("Skipping missing character sprite {}", placement.path);
                 continue;
             };
 
-            sprites.push(
-                Sprite::new(image).with_transform(Transform::from_xyz(spec.x, spec.y, spec.z)),
-            );
+            parts.push(PlayerPart {
+                sprite_index: start_index + sprites.len(),
+                offset_x: placement.x - TEST_CHARACTER_NECK_X,
+                offset_y: placement.y - TEST_CHARACTER_NECK_Y,
+            });
+
+            sprites.push(Sprite::new(image).with_transform(Transform::from_xyz(
+                placement.x,
+                placement.y,
+                placement.z,
+            )));
         }
 
         sprites
     };
 
     state.sprites.extend(sprites);
+    state.insert_resource(Player::new(
+        TEST_CHARACTER_NECK_X,
+        TEST_CHARACTER_NECK_Y,
+        parts,
+    ));
 }
 
 fn test_character_part_placements() -> Vec<CharacterPartPlacement> {

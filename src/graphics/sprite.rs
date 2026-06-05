@@ -24,6 +24,14 @@ impl Sprite {
         self.transform = transform;
         self
     }
+
+    pub fn transform(&self) -> Transform {
+        self.transform
+    }
+
+    pub fn set_transform(&mut self, transform: Transform) {
+        self.transform = transform;
+    }
 }
 
 impl RenderCommandSource for Sprite {

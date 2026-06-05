@@ -7,7 +7,7 @@ use std::{
 
 use component::Camera;
 use graphics::{RenderQueueBuilder, Renderer, RendererEvent};
-use resource::{input::CursorState, AssetManager, Cursor, Keyboard, WindowProxy};
+use resource::{input::CursorState, AssetManager, Cursor, GameKey, Keyboard, WindowProxy};
 use scene::{GameScene, LoginScene, Scene};
 use state::State;
 use winit::{
@@ -29,6 +29,9 @@ mod system;
 const VIRTUAL_WIDTH: f32 = 800.0;
 const VIRTUAL_HEIGHT: f32 = 600.0;
 const START_IN_GAME_SCENE: bool = true;
+const FIXED_UPDATE_DURATION: Duration = Duration::from_millis(8);
+const MAX_FIXED_UPDATE_ACCUMULATION: Duration = Duration::from_millis(250);
+const TARGET_FRAME_DURATION: Duration = Duration::from_nanos(1_000_000_000 / 60);
 
 enum WindowState {
     Uninitialized(EventLoopProxy<RendererEvent>),
@@ -63,6 +66,10 @@ enum GameWindowEvent {
     End,
     Tab,
     Enter,
+    KeyInput {
+        key: GameKey,
+        state: ElementState,
+    },
     Resized {
         physical_size: winit::dpi::PhysicalSize<u32>,
         scale_factor: f64,
@@ -75,7 +82,9 @@ struct Cedar {
     initial_scale_factor: f64,
     asset_manager: Option<AssetManager>,
     state: State,
-    systems: Vec<fn(&mut State)>,
+    fixed_update_systems: Vec<fn(&mut State)>,
+    input_systems: Vec<fn(&mut State)>,
+    end_of_loop_systems: Vec<fn(&mut State)>,
     scene: Box<dyn Scene>,
     renderer_tx: EventLoopProxy<RendererEvent>,
     window_rx: mpsc::Receiver<GameWindowEvent>,
@@ -88,30 +97,38 @@ impl Cedar {
 
         let mut render_queue_builder = RenderQueueBuilder::new(self.renderer_tx.clone());
 
-        let mut limiter = FrameLimiter::new(60);
+        let mut clock = GameClock::new();
         loop {
             let now = Instant::now();
+            clock.record_elapsed(now);
 
-            if limiter.ready_for_update(now) {
-                self.handle_window_events();
+            self.handle_window_events();
 
-                for system in self.systems.iter() {
+            for system in self.input_systems.iter() {
+                (system)(&mut self.state);
+            }
+
+            while clock.ready_for_fixed_update() {
+                for system in self.fixed_update_systems.iter() {
                     (system)(&mut self.state);
                 }
 
-                self.update_cursor_icon();
-                limiter.mark_update_finished(Instant::now());
+                clock.mark_fixed_update_finished();
             }
 
-            let now = Instant::now();
-
-            if limiter.ready_for_frame(now) {
+            if clock.ready_for_frame(now) {
                 render_queue_builder.generate_and_send_events(&mut self.state);
 
-                limiter.mark_frame_finished(Instant::now());
+                clock.mark_frame_finished(now);
             }
 
-            match limiter.sleep_duration(Instant::now()) {
+            for system in self.end_of_loop_systems.iter() {
+                (system)(&mut self.state);
+            }
+
+            self.update_cursor_icon();
+
+            match clock.sleep_duration(Instant::now()) {
                 Some(duration) => thread::sleep(duration),
                 None => thread::yield_now(),
             }
@@ -140,10 +157,13 @@ impl Cedar {
                 self.initial_scale_factor,
             ));
 
-        self.systems.push(system::ui::button_system);
-        self.systems.push(system::ui::text_input_system);
-        self.systems.push(system::ui::text_system);
-        self.systems.push(system::ui::clear_input_events_system);
+        self.fixed_update_systems
+            .push(system::player::player_movement_system);
+        self.input_systems.push(system::ui::button_system);
+        self.input_systems.push(system::ui::text_input_system);
+        self.input_systems.push(system::ui::text_system);
+        self.end_of_loop_systems
+            .push(system::ui::clear_input_events_system);
 
         self.scene.init(&mut self.state);
     }
@@ -185,6 +205,9 @@ impl Cedar {
                 }
                 GameWindowEvent::Enter => {
                     self.state.keyboard().add_enter();
+                }
+                GameWindowEvent::KeyInput { key, state } => {
+                    self.state.keyboard().set_key_state(key, state);
                 }
                 GameWindowEvent::Resized {
                     physical_size,
@@ -269,7 +292,9 @@ impl ApplicationHandler<RendererEvent> for WindowState {
                         initial_scale_factor,
                         asset_manager: Some(asset_manager),
                         state: State::new(),
-                        systems: Vec::new(),
+                        fixed_update_systems: Vec::new(),
+                        input_systems: Vec::new(),
+                        end_of_loop_systems: Vec::new(),
                         scene: initial_scene(),
                         renderer_tx,
                         window_rx,
@@ -331,6 +356,24 @@ impl ApplicationHandler<RendererEvent> for WindowState {
                 }
             }
             WindowEvent::KeyboardInput { event, .. } => {
+                let movement_key = match event.logical_key {
+                    Key::Named(NamedKey::ArrowLeft) => Some(GameKey::Left),
+                    Key::Named(NamedKey::ArrowRight) => Some(GameKey::Right),
+                    Key::Named(NamedKey::ArrowUp) => Some(GameKey::Up),
+                    Key::Named(NamedKey::ArrowDown) => Some(GameKey::Down),
+                    Key::Named(NamedKey::Space) => Some(GameKey::Jump),
+                    _ => None,
+                };
+
+                if let Some(key) = movement_key {
+                    if let Err(e) = manager.sender.send(GameWindowEvent::KeyInput {
+                        key,
+                        state: event.state,
+                    }) {
+                        log::error!("Error sending window event: {}", e);
+                    }
+                }
+
                 if event.state != ElementState::Pressed {
                     return;
                 }
@@ -440,44 +483,53 @@ fn main() {
         .expect("event loop should run");
 }
 
-struct FrameLimiter {
-    target_update_duration: Duration,
-    next_update_at: Instant,
-    target_frame_duration: Duration,
+struct GameClock {
+    previous_tick_at: Instant,
+    fixed_update_accumulator: Duration,
     next_frame_at: Instant,
 }
 
-impl FrameLimiter {
-    pub fn new(target_fps: u32) -> Self {
+impl GameClock {
+    pub fn new() -> Self {
         let now = Instant::now();
-        let target_duration = Duration::from_secs(1) / target_fps;
 
         Self {
-            target_update_duration: target_duration,
-            next_update_at: now + target_duration,
-            target_frame_duration: target_duration,
-            next_frame_at: now + target_duration,
+            previous_tick_at: now,
+            fixed_update_accumulator: Duration::ZERO,
+            next_frame_at: now + TARGET_FRAME_DURATION,
         }
     }
 
-    pub fn ready_for_update(&self, now: Instant) -> bool {
-        now >= self.next_update_at
+    pub fn record_elapsed(&mut self, now: Instant) {
+        let elapsed = now.saturating_duration_since(self.previous_tick_at);
+        self.previous_tick_at = now;
+        self.fixed_update_accumulator =
+            (self.fixed_update_accumulator + elapsed).min(MAX_FIXED_UPDATE_ACCUMULATION);
+    }
+
+    pub fn ready_for_fixed_update(&self) -> bool {
+        self.fixed_update_accumulator >= FIXED_UPDATE_DURATION
+    }
+
+    pub fn mark_fixed_update_finished(&mut self) {
+        self.fixed_update_accumulator -= FIXED_UPDATE_DURATION;
     }
 
     pub fn ready_for_frame(&self, now: Instant) -> bool {
         now >= self.next_frame_at
     }
 
-    pub fn mark_update_finished(&mut self, now: Instant) {
-        self.next_update_at = next_deadline(self.next_update_at, self.target_update_duration, now);
-    }
-
     pub fn mark_frame_finished(&mut self, now: Instant) {
-        self.next_frame_at = next_deadline(self.next_frame_at, self.target_frame_duration, now);
+        self.next_frame_at = next_deadline(self.next_frame_at, TARGET_FRAME_DURATION, now);
     }
 
     pub fn sleep_duration(&self, now: Instant) -> Option<Duration> {
-        let next_deadline = self.next_update_at.min(self.next_frame_at);
+        let next_fixed_update_at = if self.ready_for_fixed_update() {
+            now
+        } else {
+            now + (FIXED_UPDATE_DURATION - self.fixed_update_accumulator)
+        };
+        let next_deadline = next_fixed_update_at.min(self.next_frame_at);
         next_deadline.checked_duration_since(now)
     }
 }
