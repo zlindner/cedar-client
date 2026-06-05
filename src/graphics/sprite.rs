@@ -2,7 +2,7 @@ use uuid::Uuid;
 
 use crate::{component::Transform, resource::ImageHandle};
 
-use super::{RenderCommand, RenderCommandSource, Texture};
+use super::{render_layer, RenderCommand, RenderCommandSource, Texture};
 
 // TODO: not a fan of this being in graphics, more like a game component.
 pub struct Sprite {
@@ -47,7 +47,7 @@ impl RenderCommandSource for Sprite {
             id: self.id,
             texture: Texture::from_image(self.image.image()),
             transform: self.transform,
-            layer: self.transform.z as usize,
+            layer: render_layer(self.transform.z),
             camera_affected: self.camera_affected,
         });
     }

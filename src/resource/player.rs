@@ -6,6 +6,9 @@ pub struct Player {
     pub velocity_x: f32,
     pub velocity_y: f32,
     pub grounded: bool,
+    pub foothold_id: u16,
+    pub foothold_layer: u8,
+    pub ground_slope: f32,
     pub parts: Vec<PlayerPart>,
 }
 
@@ -17,8 +20,18 @@ impl Player {
             velocity_x: 0.0,
             velocity_y: 0.0,
             grounded: true,
+            foothold_id: 0,
+            foothold_layer: 0,
+            ground_slope: 0.0,
             parts,
         }
+    }
+
+    pub fn with_ground(mut self, foothold_id: u16, foothold_layer: u8, ground_slope: f32) -> Self {
+        self.foothold_id = foothold_id;
+        self.foothold_layer = foothold_layer;
+        self.ground_slope = ground_slope;
+        self
     }
 }
 

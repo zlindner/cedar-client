@@ -36,7 +36,7 @@ impl RenderCommandSource for TextGlyph {
             id: self.id,
             texture: self.texture.clone(),
             transform: self.transform,
-            layer: self.transform.z as usize,
+            layer: crate::graphics::render_layer(self.transform.z),
             camera_affected: false,
         });
     }

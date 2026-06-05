@@ -2,7 +2,7 @@ use uuid::Uuid;
 
 use crate::{
     component::Transform,
-    graphics::{RenderCommand, RenderCommandSource, Texture},
+    graphics::{render_layer, RenderCommand, RenderCommandSource, Texture},
     resource::{AssetManager, ImageHandle},
 };
 
@@ -77,7 +77,7 @@ impl RenderCommandSource for Button {
             id: self.id,
             texture: Texture::from_image(image.image()),
             transform: self.transform,
-            layer: self.transform.z as usize,
+            layer: render_layer(self.transform.z),
             camera_affected: false,
         });
     }

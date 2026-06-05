@@ -1,10 +1,10 @@
 use crate::{
-    component::{Colour, Transform},
+    component::{Camera, Colour, Transform},
     graphics::{
         ui::{load_button_images, Button, ButtonState, TextInput},
         Sprite,
     },
-    resource::{AssetManager, FontDescriptor, Player, PlayerPart},
+    resource::{AssetManager, FontDescriptor, Ground, MapLine, MapPhysics, Player, PlayerPart},
     state::State,
 };
 use nx_pkg4::{Node, NxNode};
@@ -36,11 +36,15 @@ impl Scene for GameScene {
 }
 
 const TEST_MAP_ID: i32 = 100000000;
-const TEST_MAP_VIEW_X: f32 = -3600.0;
+const TEST_MAP_VIEW_X: f32 = 0.0;
 const TEST_MAP_VIEW_Y: f32 = 0.0;
-const TEST_CHARACTER_NECK_X: f32 = 400.0;
-const TEST_CHARACTER_NECK_Y: f32 = 350.0;
+const TEST_CHARACTER_X: f32 = 4000.0;
+const TEST_CHARACTER_SPAWN_Y: f32 = 350.0;
+const TEST_CAMERA_INITIAL_Y_OFFSET: f32 = -32.0;
+const TEST_CAMERA_BOTTOM_PADDING: f32 = 120.0;
 const GAME_STATUS_BAR_Y: f32 = 480.0;
+const DEBUG_FOOTHOLDS: bool = true;
+const DEBUG_FOOTHOLD_Z: f32 = 16.0;
 
 struct MapSpritePlacement {
     path: String,
@@ -51,10 +55,16 @@ struct MapSpritePlacement {
 }
 
 struct CharacterPartPlacement {
-    path: &'static str,
+    path: String,
     x: f32,
     y: f32,
     z: f32,
+}
+
+struct CharacterStart {
+    x: f32,
+    y: f32,
+    ground: Option<Ground>,
 }
 
 // TODO: we might eventually want sprites to be more complex (animations, hiding, etc.), so we may
@@ -172,12 +182,12 @@ fn init_text_inputs(state: &mut State) {
 }
 
 fn init_test_map(state: &mut State) {
-    let sprites = {
+    let (sprites, map_physics) = {
         let mut assets = state
             .get_resource_mut::<AssetManager>()
             .expect("AssetManager should exist");
 
-        let specs = collect_test_map_sprite_specs(&assets);
+        let (specs, map_physics) = collect_test_map_data(&assets);
         let mut sprites = Vec::new();
 
         for spec in specs {
@@ -210,14 +220,26 @@ fn init_test_map(state: &mut State) {
             });
         }
 
-        sprites
+        if DEBUG_FOOTHOLDS {
+            if let Some(map_physics) = &map_physics {
+                append_debug_foothold_sprites(&mut sprites, &mut assets, map_physics);
+            }
+        }
+
+        (sprites, map_physics)
     };
 
     state.sprites.extend(sprites);
+
+    if let Some(map_physics) = map_physics {
+        state.insert_resource(map_physics);
+    }
 }
 
 fn init_test_character(state: &mut State) {
     let start_index = state.sprites.len();
+    let start = test_character_start_position(state);
+    let position = (start.x, start.y);
     let mut parts = Vec::new();
 
     let sprites = {
@@ -225,19 +247,19 @@ fn init_test_character(state: &mut State) {
             .get_resource_mut::<AssetManager>()
             .expect("AssetManager should exist");
 
-        let placements = test_character_part_placements();
+        let placements = test_character_part_placements(&assets, position);
         let mut sprites = Vec::new();
 
         for placement in placements {
-            let Some(image) = assets.load_image(placement.path) else {
+            let Some(image) = assets.load_image(&placement.path) else {
                 log::warn!("Skipping missing character sprite {}", placement.path);
                 continue;
             };
 
             parts.push(PlayerPart {
                 sprite_index: start_index + sprites.len(),
-                offset_x: placement.x - TEST_CHARACTER_NECK_X,
-                offset_y: placement.y - TEST_CHARACTER_NECK_Y,
+                offset_x: placement.x - position.0,
+                offset_y: placement.y - position.1,
             });
 
             sprites.push(Sprite::new(image).with_transform(Transform::from_xyz(
@@ -251,52 +273,88 @@ fn init_test_character(state: &mut State) {
     };
 
     state.sprites.extend(sprites);
-    state.insert_resource(Player::new(
-        TEST_CHARACTER_NECK_X,
-        TEST_CHARACTER_NECK_Y,
-        parts,
-    ));
+    let mut player = Player::new(position.0, position.1, parts);
+    if let Some(ground) = start.ground {
+        player = player.with_ground(ground.id, ground.layer, ground.slope);
+    }
+    state.insert_resource(player);
+    center_camera_on_test_character(state, position);
 }
 
-fn test_character_part_placements() -> Vec<CharacterPartPlacement> {
-    let neck = (TEST_CHARACTER_NECK_X, TEST_CHARACTER_NECK_Y);
+fn center_camera_on_test_character(state: &State, position: (f32, f32)) {
+    let Some(map_physics) = state.get_resource::<MapPhysics>() else {
+        return;
+    };
+    let walls = map_physics.walls();
+    let mut borders = map_physics.borders();
+    borders.max -= TEST_CAMERA_BOTTOM_PADDING;
+    drop(map_physics);
 
-    let body = align_part_to_anchor(neck, (-4.0, -32.0));
-    let body_navel = add_points(body, (-8.0, -21.0));
-    let arm = align_part_to_anchor(body_navel, (-13.0, -1.0));
+    let Some(mut camera) = state.get_resource_mut::<Camera>() else {
+        return;
+    };
+    camera.center_on_clamped(
+        position.0,
+        position.1 + TEST_CAMERA_INITIAL_Y_OFFSET,
+        walls,
+        borders,
+    );
+}
 
-    let head = align_part_to_anchor(neck, (0.0, 15.0));
-    let brow = add_points(head, (-4.0, -5.0));
-    let face = align_part_to_anchor(brow, (-1.0, -12.0));
-    let hair = align_part_to_anchor(brow, (0.0, 0.0));
+fn test_character_part_placements(
+    assets: &AssetManager,
+    position: (f32, f32),
+) -> Vec<CharacterPartPlacement> {
+    let body_path = "Character.nx/00002000.img/stand1/0/body";
+    let arm_path = "Character.nx/00002000.img/stand1/0/arm";
+    let head_path = "Character.nx/00012000.img/stand1/0/head";
+    let face_path = "Character.nx/Face/00020000.img/default/face";
+    let hair_path = "Character.nx/Hair/00030000.img/default/hair";
+
+    let Some(anchors) = character_anchors(assets, body_path, arm_path, head_path, hair_path) else {
+        log::warn!("Falling back to approximate character placement");
+        return fallback_character_part_placements(position);
+    };
+
+    let body = position;
+    let arm = add_points(position, sub_points(anchors.body_navel, anchors.arm_navel));
+    let head = add_points(position, sub_points(anchors.body_neck, anchors.head_neck));
+    let face = add_points(head, anchors.head_brow);
+    let hair = add_points(
+        position,
+        add_points(
+            sub_points(anchors.head_brow, anchors.head_neck),
+            sub_points(anchors.body_neck, anchors.hair_brow),
+        ),
+    );
 
     vec![
         CharacterPartPlacement {
-            path: "Character.nx/00002000.img/stand1/0/body",
+            path: body_path.to_string(),
             x: body.0,
             y: body.1,
             z: 17.0,
         },
         CharacterPartPlacement {
-            path: "Character.nx/00002000.img/stand1/0/arm",
+            path: arm_path.to_string(),
             x: arm.0,
             y: arm.1,
             z: 18.0,
         },
         CharacterPartPlacement {
-            path: "Character.nx/00012000.img/front/head",
+            path: head_path.to_string(),
             x: head.0,
             y: head.1,
             z: 19.0,
         },
         CharacterPartPlacement {
-            path: "Character.nx/Face/00020000.img/default/face",
+            path: face_path.to_string(),
             x: face.0,
             y: face.1,
             z: 20.0,
         },
         CharacterPartPlacement {
-            path: "Character.nx/Hair/00030000.img/default/hair",
+            path: hair_path.to_string(),
             x: hair.0,
             y: hair.1,
             z: 21.0,
@@ -304,27 +362,176 @@ fn test_character_part_placements() -> Vec<CharacterPartPlacement> {
     ]
 }
 
-fn align_part_to_anchor(anchor: (f32, f32), part_anchor: (f32, f32)) -> (f32, f32) {
-    (anchor.0 - part_anchor.0, anchor.1 - part_anchor.1)
+struct CharacterAnchors {
+    body_navel: (f32, f32),
+    body_neck: (f32, f32),
+    arm_navel: (f32, f32),
+    head_neck: (f32, f32),
+    head_brow: (f32, f32),
+    hair_brow: (f32, f32),
+}
+
+fn character_anchors(
+    assets: &AssetManager,
+    body_path: &str,
+    arm_path: &str,
+    head_path: &str,
+    hair_path: &str,
+) -> Option<CharacterAnchors> {
+    let body_navel = assets.with_node(body_path, |node| node_vector(node, "map/navel"))??;
+    let body_neck = assets.with_node(body_path, |node| node_vector(node, "map/neck"))??;
+    let arm_navel = assets.with_node(arm_path, |node| node_vector(node, "map/navel"))??;
+    let head_neck = assets.with_node(head_path, |node| node_vector(node, "map/neck"))??;
+    let head_brow = assets.with_node(head_path, |node| node_vector(node, "map/brow"))??;
+    let hair_brow = assets.with_node(hair_path, |node| node_vector(node, "map/brow"))??;
+
+    Some(CharacterAnchors {
+        body_navel,
+        body_neck,
+        arm_navel,
+        head_neck,
+        head_brow,
+        hair_brow,
+    })
+}
+
+fn fallback_character_part_placements(position: (f32, f32)) -> Vec<CharacterPartPlacement> {
+    let body = position;
+    let body_navel = add_points(body, (-8.0, -21.0));
+    let arm = add_points(body_navel, (13.0, 1.0));
+
+    let head = add_points(position, (-4.0, -47.0));
+    let brow = add_points(head, (-4.0, -5.0));
+    let face = add_points(brow, (1.0, 12.0));
+    let hair = brow;
+
+    vec![
+        CharacterPartPlacement {
+            path: "Character.nx/00002000.img/stand1/0/body".to_string(),
+            x: body.0,
+            y: body.1,
+            z: 17.0,
+        },
+        CharacterPartPlacement {
+            path: "Character.nx/00002000.img/stand1/0/arm".to_string(),
+            x: arm.0,
+            y: arm.1,
+            z: 18.0,
+        },
+        CharacterPartPlacement {
+            path: "Character.nx/00012000.img/front/head".to_string(),
+            x: head.0,
+            y: head.1,
+            z: 19.0,
+        },
+        CharacterPartPlacement {
+            path: "Character.nx/Face/00020000.img/default/face".to_string(),
+            x: face.0,
+            y: face.1,
+            z: 20.0,
+        },
+        CharacterPartPlacement {
+            path: "Character.nx/Hair/00030000.img/default/hair".to_string(),
+            x: hair.0,
+            y: hair.1,
+            z: 21.0,
+        },
+    ]
+}
+
+fn test_character_start_position(state: &State) -> CharacterStart {
+    let ground = state
+        .get_resource::<MapPhysics>()
+        .and_then(|map_physics| map_physics.ground_below(TEST_CHARACTER_X, TEST_CHARACTER_SPAWN_Y));
+
+    CharacterStart {
+        x: TEST_CHARACTER_X,
+        y: ground.map(|ground| ground.y).unwrap_or(350.0),
+        ground,
+    }
+}
+
+fn sub_points(a: (f32, f32), b: (f32, f32)) -> (f32, f32) {
+    (a.0 - b.0, a.1 - b.1)
 }
 
 fn add_points(a: (f32, f32), b: (f32, f32)) -> (f32, f32) {
     (a.0 + b.0, a.1 + b.1)
 }
 
-fn collect_test_map_sprite_specs(assets: &AssetManager) -> Vec<MapSpritePlacement> {
+fn collect_test_map_data(assets: &AssetManager) -> (Vec<MapSpritePlacement>, Option<MapPhysics>) {
     let map_path = map_node_path(TEST_MAP_ID);
-    let Some(specs) = assets.with_node(&map_path, |map| {
+    let Some(data) = assets.with_node(&map_path, |map| {
         let mut specs = Vec::new();
         collect_background_specs(map, &mut specs);
-        collect_layer_specs(map, &mut specs);
-        specs
+        collect_layer_specs(assets, map, &mut specs);
+        let map_physics = MapPhysics::from_node(map);
+        (specs, map_physics)
     }) else {
         log::warn!("Missing test map {}", map_path);
-        return Vec::new();
+        return (Vec::new(), None);
     };
 
-    specs
+    data
+}
+
+fn append_debug_foothold_sprites(
+    sprites: &mut Vec<Sprite>,
+    assets: &mut AssetManager,
+    map_physics: &MapPhysics,
+) {
+    for line in map_physics.debug_foothold_lines() {
+        let (x, y, width, height, data) = debug_line_image(line);
+        let image = assets.create_image(
+            format!("debug/foothold/{}", line.id),
+            width,
+            height,
+            data,
+            None,
+        );
+
+        sprites.push(Sprite::new(image).with_transform(Transform::from_xyz(
+            x,
+            y,
+            DEBUG_FOOTHOLD_Z,
+        )));
+    }
+}
+
+fn debug_line_image(line: MapLine) -> (f32, f32, u32, u32, Vec<u8>) {
+    let min_x = line.x1.min(line.x2).floor();
+    let min_y = line.y1.min(line.y2).floor();
+    let max_x = line.x1.max(line.x2).ceil();
+    let max_y = line.y1.max(line.y2).ceil();
+    let width = (max_x - min_x + 1.0).max(1.0) as u32;
+    let height = (max_y - min_y + 1.0).max(1.0) as u32;
+    let mut data = vec![0; width as usize * height as usize * 4];
+
+    let dx = line.x2 - line.x1;
+    let dy = line.y2 - line.y1;
+    let steps = dx.abs().max(dy.abs()).max(1.0) as usize;
+
+    for step in 0..=steps {
+        let t = step as f32 / steps as f32;
+        let x = (line.x1 + dx * t - min_x).round() as i32;
+        let y = (line.y1 + dy * t - min_y).round() as i32;
+        set_debug_pixel(&mut data, width, height, x, y);
+        set_debug_pixel(&mut data, width, height, x, y + 1);
+    }
+
+    (min_x, min_y, width, height, data)
+}
+
+fn set_debug_pixel(data: &mut [u8], width: u32, height: u32, x: i32, y: i32) {
+    if x < 0 || y < 0 || x >= width as i32 || y >= height as i32 {
+        return;
+    }
+
+    let index = (y as u32 * width + x as u32) as usize * 4;
+    data[index] = 0;
+    data[index + 1] = 0;
+    data[index + 2] = 255;
+    data[index + 3] = 255;
 }
 
 fn collect_background_specs(map: NxNode, specs: &mut Vec<MapSpritePlacement>) {
@@ -359,14 +566,14 @@ fn collect_background_specs(map: NxNode, specs: &mut Vec<MapSpritePlacement>) {
     }
 }
 
-fn collect_layer_specs(map: NxNode, specs: &mut Vec<MapSpritePlacement>) {
+fn collect_layer_specs(assets: &AssetManager, map: NxNode, specs: &mut Vec<MapSpritePlacement>) {
     for layer in 0..8 {
         let Some(layer_node) = map.get(&layer.to_string()) else {
             continue;
         };
 
         collect_obj_specs(layer_node, layer, specs);
-        collect_tile_specs(layer_node, layer, specs);
+        collect_tile_specs(assets, layer_node, layer, specs);
     }
 }
 
@@ -399,13 +606,18 @@ fn collect_obj_specs(layer_node: NxNode, layer: i32, specs: &mut Vec<MapSpritePl
             ),
             x: node_integer(obj, "x").unwrap_or_default() as f32,
             y: node_integer(obj, "y").unwrap_or_default() as f32,
-            z: map_layer_z(layer, node_integer(obj, "z").unwrap_or_default()),
+            z: map_object_z(layer, node_integer(obj, "z").unwrap_or_default()),
             apply_view_offset: true,
         });
     }
 }
 
-fn collect_tile_specs(layer_node: NxNode, layer: i32, specs: &mut Vec<MapSpritePlacement>) {
+fn collect_tile_specs(
+    assets: &AssetManager,
+    layer_node: NxNode,
+    layer: i32,
+    specs: &mut Vec<MapSpritePlacement>,
+) {
     let Some(tile_set) = layer_node
         .get("info")
         .and_then(|info| node_string(info, "tS"))
@@ -424,14 +636,28 @@ fn collect_tile_specs(layer_node: NxNode, layer: i32, specs: &mut Vec<MapSpriteP
             continue;
         };
         let no = node_integer(tile, "no").unwrap_or_default();
+        let path = format!("Map.nx/Tile/{}.img/{}/{}", tile_set, tile_group, no);
+        let tile_z = tile_render_z(assets, &path, tile);
 
         specs.push(MapSpritePlacement {
-            path: format!("Map.nx/Tile/{}.img/{}/{}", tile_set, tile_group, no),
+            path,
             x: node_integer(tile, "x").unwrap_or_default() as f32,
             y: node_integer(tile, "y").unwrap_or_default() as f32,
-            z: map_layer_z(layer, node_integer(tile, "zM").unwrap_or_default()),
+            z: map_tile_z(layer, tile_z),
             apply_view_offset: true,
         });
+    }
+}
+
+fn tile_render_z(assets: &AssetManager, path: &str, tile: NxNode) -> i64 {
+    let image_z = assets
+        .with_node(path, |image| node_integer(image, "z").unwrap_or_default())
+        .unwrap_or_default();
+
+    if image_z == 0 {
+        node_integer(tile, "zM").unwrap_or_default()
+    } else {
+        image_z
     }
 }
 
@@ -443,12 +669,28 @@ fn map_node_path(map_id: i32) -> String {
     )
 }
 
-fn map_layer_z(layer: i32, z: i64) -> f32 {
-    1.0 + layer as f32 * 2.0 + z as f32 / 100.0
+fn map_object_z(layer: i32, z: i64) -> f32 {
+    map_layer_base_z(layer) + z as f32 / 1000.0
+}
+
+fn map_tile_z(layer: i32, z: i64) -> f32 {
+    map_layer_base_z(layer) + 0.5 + z as f32 / 1000.0
+}
+
+fn map_layer_base_z(layer: i32) -> f32 {
+    1.0 + layer as f32 * 2.0
 }
 
 fn node_integer(node: NxNode, child: &str) -> Option<i64> {
     node.get(child).integer().ok().flatten()
+}
+
+fn node_vector(node: NxNode, child: &str) -> Option<(f32, f32)> {
+    node.get(child)
+        .vector()
+        .ok()
+        .flatten()
+        .map(|(x, y)| (x as f32, y as f32))
 }
 
 fn node_string(node: NxNode, child: &str) -> Option<String> {

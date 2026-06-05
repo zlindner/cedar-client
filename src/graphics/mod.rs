@@ -47,6 +47,10 @@ pub trait RenderCommandSource {
     fn append_render_commands(&self, commands: &mut Vec<RenderCommand>);
 }
 
+pub fn render_layer(z: f32) -> usize {
+    (z * 1000.0).max(0.0) as usize
+}
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub(crate) struct Vertex {

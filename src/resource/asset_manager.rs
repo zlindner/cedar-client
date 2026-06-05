@@ -54,6 +54,27 @@ impl AssetManager {
         Some(ImageHandle { image })
     }
 
+    pub fn create_image(
+        &mut self,
+        path: String,
+        width: u32,
+        height: u32,
+        data: Vec<u8>,
+        origin: Option<(i32, i32)>,
+    ) -> ImageHandle {
+        let image = Arc::new(ImageAsset {
+            path: path.clone(),
+            width,
+            height,
+            data,
+            origin,
+            layer: None,
+        });
+        self.images.insert(path, image.clone());
+
+        ImageHandle { image }
+    }
+
     pub fn get_texture(&mut self, path: &str) -> Option<Texture> {
         let handle = self.load_image(path)?;
         Some(Texture::from_image(handle.image()))
@@ -90,7 +111,9 @@ impl AssetManager {
             }
         };
 
-        match ImageAsset::load(path, node) {
+        let bitmap_node = resolve_bitmap_node(&root, node).unwrap_or(node);
+
+        match ImageAsset::load_with_bitmap(path, node, bitmap_node) {
             Ok(image) => image,
             Err(e) => {
                 log::error!("Error getting image {}: {}", path, e);
@@ -122,4 +145,37 @@ impl AssetManager {
 
         self.fonts.get(descriptor)
     }
+}
+
+fn resolve_bitmap_node<'a>(root: &'a NxNode<'a>, node: NxNode<'a>) -> Option<NxNode<'a>> {
+    let source = node_string(node, "source");
+    let outlink = node_string(node, "_outlink");
+
+    resolve_link(root, source.as_deref())
+        .or_else(|| resolve_link(root, outlink.as_deref()))
+        .or_else(|| resolve_inlink(root, node_string(node, "_inlink").as_deref()))
+}
+
+fn resolve_link<'a>(root: &'a NxNode<'a>, link: Option<&str>) -> Option<NxNode<'a>> {
+    let link = link?;
+    if link.is_empty() {
+        return None;
+    }
+
+    let path = link.split_once('/').map(|(_, path)| path).unwrap_or(link);
+    root.get(path)
+}
+
+fn resolve_inlink<'a>(root: &'a NxNode<'a>, link: Option<&str>) -> Option<NxNode<'a>> {
+    let node = resolve_link(root, link)?;
+
+    if node.bitmap().ok().flatten().is_some() {
+        Some(node)
+    } else {
+        None
+    }
+}
+
+fn node_string(node: NxNode<'_>, child: &str) -> Option<String> {
+    node.get(child).string().ok().flatten().map(str::to_string)
 }

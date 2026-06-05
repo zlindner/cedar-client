@@ -13,7 +13,11 @@ pub struct ImageAsset {
 }
 
 impl ImageAsset {
-    pub fn load(path: &str, node: NxNode) -> Result<Option<Self>, NxError> {
+    pub fn load_with_bitmap(
+        path: &str,
+        node: NxNode,
+        bitmap_node: NxNode,
+    ) -> Result<Option<Self>, NxError> {
         let origin = match node.get("origin") {
             Some(child) => child.vector()?,
             None => None,
@@ -24,7 +28,7 @@ impl ImageAsset {
             None => None,
         };
 
-        let bitmap = match node.bitmap()? {
+        let bitmap = match bitmap_node.bitmap()? {
             Some(bitmap) => bitmap,
             None => {
                 log::warn!("{} isn't a bitmap", path);

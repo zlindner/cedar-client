@@ -158,9 +158,9 @@ fn command_intersects_camera(command: &RenderCommand, camera: &Camera) -> bool {
     let bottom = top + command.texture.image.height as f32 * scale;
 
     let camera_left = camera.left;
-    let camera_top = camera.top;
+    let camera_top = camera.visible_top();
     let camera_right = camera.right;
-    let camera_bottom = -camera.bottom;
+    let camera_bottom = camera.visible_bottom();
 
     right >= camera_left && left <= camera_right && bottom >= camera_top && top <= camera_bottom
 }
